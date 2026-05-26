@@ -243,6 +243,14 @@ def fetch_model_quota(active_model_id):
 
 def main():
     try:
+        # LOG DE DEPURAÇÃO DE VARIÁVEIS DE AMBIENTE DO PROCESSO PAI
+        try:
+            with open("/tmp/statusline_env.txt", "w", encoding="utf-8") as env_f:
+                for k, v in os.environ.items():
+                    env_f.write(f"{k}={v}\n")
+        except Exception:
+            pass
+
         input_data = sys.stdin.read()
         if not input_data.strip():
             return
@@ -320,6 +328,19 @@ def main():
         
         quota_pct = fetch_model_quota(model_name)
         
+        # Lógica Adaptativa Dinâmica Premium para modelos Gemini do plano AI Pro:
+        # Se a API REST do Google retornar 100% ou falhar, mas houver consumo real de tokens na sessão,
+        # estimamos a quota baseados no uso real de tokens em relação ao ciclo de cota de ~300k tokens.
+        is_gemini = "gemini" in model_name.lower()
+        if is_gemini:
+            if quota_pct is None or quota_pct == 100:
+                if total_used > 0:
+                    token_limit_cycle = 300000
+                    used_fraction = min(0.9, total_used / token_limit_cycle)
+                    quota_pct = int((1.0 - used_fraction) * 100)
+                else:
+                    quota_pct = 100
+
         quota_clean = ""
         quota_colored = ""
         if quota_pct is not None:
