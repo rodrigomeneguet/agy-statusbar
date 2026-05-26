@@ -317,34 +317,24 @@ def main():
         # 4. Quota Real do Modelo (Centro Direito)
         model = data.get("model") or {}
         model_name = model.get("display_name") or model.get("id") or "Desconhecido"
-        
+
         quota_pct = fetch_model_quota(model_name)
-        
-        # Lógica Adaptativa Dinâmica Premium para modelos Gemini do plano AI Pro:
-        # Se a API REST do Google retornar 100% ou falhar, mas houver consumo real de tokens na sessão,
-        # estimamos a quota baseados no uso real de tokens em relação ao ciclo de cota de ~300k tokens.
-        is_gemini = "gemini" in model_name.lower()
-        if is_gemini:
-            if quota_pct is None or quota_pct == 100:
-                if total_used > 0:
-                    token_limit_cycle = 300000
-                    used_fraction = min(0.9, total_used / token_limit_cycle)
-                    quota_pct = int((1.0 - used_fraction) * 100)
-                else:
-                    quota_pct = 100
 
         quota_clean = ""
         quota_colored = ""
-        if quota_pct is not None:
-            # Gerar barra de quota utilizando o reverse=True (quota restante)
+
+        # Exibe barra de quota apenas quando a API reporta valor real (< 100%).
+        # Para planos Google One AI Pro a API sempre retorna 1.0 (100%), então
+        # exibimos o tier do plano de forma elegante em vez de uma barra falsa.
+        if quota_pct is not None and quota_pct < 100:
             q_bar_clean, q_bar_colored, quota_alert_color = make_progress_bar_colored(quota_pct, reverse=True)
             quota_clean = f"[Quota: {q_bar_clean} {quota_pct}%]"
             quota_colored = f"{C_GRAY}[{C_RESET}{quota_alert_color}Quota: {C_RESET}{q_bar_colored} {quota_alert_color}{quota_pct}%{C_RESET}{C_GRAY}]{C_RESET}"
         else:
-            plan_tier = data.get("plan_tier") or ""
-            if plan_tier:
-                quota_clean = f"[{plan_tier}]"
-                quota_colored = f"{C_GRAY}[{C_RESET}{C_MAGENTA}{plan_tier}{C_RESET}{C_GRAY}]{C_RESET}"
+            # A API não reporta cota real → plano premium ativo (Google One AI Pro)
+            plan_label = "Google AI Pro"
+            quota_clean = f"[{plan_label}]"
+            quota_colored = f"{C_GRAY}[{C_RESET}{C_MAGENTA}{plan_label}{C_RESET}{C_GRAY}]{C_RESET}"
 
         # 5. Modelo Ativo (Direita)
         right_clean = f"◈ {model_name}"
