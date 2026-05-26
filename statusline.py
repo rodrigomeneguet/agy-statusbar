@@ -117,8 +117,8 @@ def fetch_model_quota(active_model_id):
         with urllib.request.urlopen(req_token, timeout=1.5) as res_t:
             token = json.loads(res_t.read().decode("utf-8"))["access_token"]
 
-        # 2. Consultar Quotas
-        url_quota = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota"
+        # 2. Consultar Quotas no Endpoint de Produção
+        url_quota = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota"
         req_quota = urllib.request.Request(
             url_quota,
             data=json.dumps({"project": "projects/-"}).encode("utf-8"),
@@ -149,27 +149,33 @@ def fetch_model_quota(active_model_id):
                     if bid in clean_id or clean_id in bid:
                         matched_bucket = b
                         break
-            # Palavras-chave
+            # Palavras-chave com busca de versão inteligente (evita fallback ingênuo para gemini-2.5)
             if not matched_bucket:
                 is_pro = "pro" in clean_id
                 is_lite = "lite" in clean_id
                 is_flash = "flash" in clean_id
                 
+                candidates = []
                 if is_pro:
-                    for b in buckets:
-                        if "pro" in b.get("modelId", "").lower():
-                            matched_bucket = b
-                            break
+                    candidates = [b for b in buckets if "pro" in b.get("modelId", "").lower()]
                 elif is_lite:
-                    for b in buckets:
-                        if "lite" in b.get("modelId", "").lower():
-                            matched_bucket = b
-                            break
+                    candidates = [b for b in buckets if "lite" in b.get("modelId", "").lower()]
                 elif is_flash:
-                    for b in buckets:
-                        if "flash" in b.get("modelId", "").lower():
-                            matched_bucket = b
-                            break
+                    candidates = [b for b in buckets if "flash" in b.get("modelId", "").lower()]
+                
+                if candidates:
+                    # Ordenar candidatos por versão numérica extraída do modelId (maior versão primeiro)
+                    def get_version(b):
+                        bid = b.get("modelId", "").lower()
+                        parts = bid.split("-")
+                        for p in parts:
+                            try:
+                                return float(p)
+                            except ValueError:
+                                continue
+                        return 0.0
+                    candidates.sort(key=get_version, reverse=True)
+                    matched_bucket = candidates[0]
                             
             if not matched_bucket and buckets:
                 matched_bucket = buckets[0]
