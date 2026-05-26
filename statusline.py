@@ -87,102 +87,156 @@ def make_progress_bar_colored(used_pct, width=8, reverse=False):
     colored_bar = f"{color}{'█' * filled}{C_GRAY}{'░' * empty}{C_RESET}"
     return clean_bar, colored_bar, color
 
+# Mapeamento de nomes de display do Agy → palavras-chave do modelId da API de quota.
+# Chave: substring do display_name em minúsculas. Valor: lista de keywords para busca.
+_DISPLAY_TO_KEYWORDS = {
+    "3.5 flash":   ["3.1", "flash"],   # Agy chama de 3.5, API usa 3.1
+    "3.1 flash":   ["3.1", "flash"],
+    "3 flash":     ["3", "flash"],
+    "3.5 pro":     ["3.1", "pro"],
+    "3.1 pro":     ["3.1", "pro"],
+    "3 pro":       ["3", "pro"],
+    "2.5 flash":   ["2.5", "flash"],
+    "2.5 pro":     ["2.5", "pro"],
+    "flash lite":  ["lite"],
+    "flash":       ["flash"],
+    "pro":         ["pro"],
+}
+
+def _match_bucket(buckets, active_model_id):
+    """Retorna o bucket mais relevante para o modelo ativo, ou None."""
+    if not buckets:
+        return None
+
+    name_lower = active_model_id.lower()
+    clean_id   = name_lower.replace(" ", "-")
+
+    # 1. Match exato com modelId
+    for b in buckets:
+        if b.get("modelId", "").lower() == clean_id:
+            return b
+
+    # 2. Substring direto (modelId contido no nome ou vice-versa)
+    for b in buckets:
+        bid = b.get("modelId", "").lower()
+        if bid and (bid in clean_id or clean_id in bid):
+            return b
+
+    # 3. Mapeamento de display-name → keywords da API
+    matched_keywords = None
+    for display_key, keywords in _DISPLAY_TO_KEYWORDS.items():
+        if display_key in name_lower:
+            matched_keywords = keywords
+            break
+
+    if matched_keywords is None:
+        # Fallback: extrair palavras-chave genéricas do nome
+        is_pro   = "pro"   in name_lower
+        is_lite  = "lite"  in name_lower
+        is_flash = "flash" in name_lower
+        if is_lite:
+            matched_keywords = ["lite"]
+        elif is_pro:
+            matched_keywords = ["pro"]
+        elif is_flash:
+            matched_keywords = ["flash"]
+
+    if matched_keywords:
+        candidates = []
+        for b in buckets:
+            bid = b.get("modelId", "").lower()
+            if all(kw in bid for kw in matched_keywords):
+                candidates.append(b)
+
+        if not candidates:
+            # Afrouxar: qualquer keyword basta
+            for b in buckets:
+                bid = b.get("modelId", "").lower()
+                if any(kw in bid for kw in matched_keywords):
+                    candidates.append(b)
+
+        if candidates:
+            # Preferir o bucket com menor quota restante (mais informativo)
+            # Em caso de empate, preferir a maior versão numérica
+            def sort_key(b):
+                bid   = b.get("modelId", "").lower()
+                frac  = b.get("remainingFraction", 1.0)
+                # Extrair maior número de versão do modelId
+                ver   = 0.0
+                for part in bid.split("-"):
+                    try:
+                        ver = max(ver, float(part))
+                    except ValueError:
+                        pass
+                return (frac, -ver)   # menor frac primeiro; maior versão primeiro
+            candidates.sort(key=sort_key)
+            return candidates[0]
+
+    # 4. Fallback final: bucket com MENOR quota restante (mais conservador)
+    return min(buckets, key=lambda b: b.get("remainingFraction", 1.0))
+
+
 def fetch_model_quota(active_model_id):
     try:
         token_path = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
         # Split string to bypass GitHub naive static regex push protection
         client_id = "1071006060591-" + "tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
         client_secret = "GOCSPX-" + "K58FWR486LdLJ1mLB8sXC4z6qDAf"
-        
+
         if not os.path.exists(token_path):
             return None
-            
+
         with open(token_path, "r", encoding="utf-8") as f:
             tdata = json.load(f)
             refresh_token = tdata["token"]["refresh_token"]
 
-        # 1. Renovar o token de acesso de forma assíncrona/rápida (200ms)
+        # 1. Renovar o token de acesso
         url_token = "https://oauth2.googleapis.com/token"
         params = {
             "client_id": client_id,
             "client_secret": client_secret,
             "grant_type": "refresh_token",
-            "refresh_token": refresh_token
+            "refresh_token": refresh_token,
         }
         req_token = urllib.request.Request(
             url_token,
             data=urllib.parse.urlencode(params).encode("utf-8"),
-            method="POST"
+            method="POST",
         )
         with urllib.request.urlopen(req_token, timeout=1.5) as res_t:
             token = json.loads(res_t.read().decode("utf-8"))["access_token"]
 
-        # 2. Consultar Quotas no Endpoint de Produção
-        url_quota = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota"
-        req_quota = urllib.request.Request(
-            url_quota,
-            data=json.dumps({"project": "projects/-"}).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json"
-            },
-            method="POST"
-        )
-        with urllib.request.urlopen(req_quota, timeout=1.5) as res_q:
-            qdata = json.loads(res_q.read().decode("utf-8"))
-            buckets = qdata.get("buckets", [])
-            
-            # Fazer a busca inteligente do modelo correspondente
-            clean_id = active_model_id.lower().replace(" ", "-")
-            matched_bucket = None
-            
-            # Tentativa de match exato
-            for b in buckets:
-                bid = b.get("modelId", "").lower()
-                if bid == clean_id:
-                    matched_bucket = b
-                    break
-            # Substring match
-            if not matched_bucket:
-                for b in buckets:
-                    bid = b.get("modelId", "").lower()
-                    if bid in clean_id or clean_id in bid:
-                        matched_bucket = b
-                        break
-            # Palavras-chave com busca de versão inteligente (evita fallback ingênuo para gemini-2.5)
-            if not matched_bucket:
-                is_pro = "pro" in clean_id
-                is_lite = "lite" in clean_id
-                is_flash = "flash" in clean_id
-                
-                candidates = []
-                if is_pro:
-                    candidates = [b for b in buckets if "pro" in b.get("modelId", "").lower()]
-                elif is_lite:
-                    candidates = [b for b in buckets if "lite" in b.get("modelId", "").lower()]
-                elif is_flash:
-                    candidates = [b for b in buckets if "flash" in b.get("modelId", "").lower()]
-                
-                if candidates:
-                    # Ordenar candidatos por versão numérica extraída do modelId (maior versão primeiro)
-                    def get_version(b):
-                        bid = b.get("modelId", "").lower()
-                        parts = bid.split("-")
-                        for p in parts:
-                            try:
-                                return float(p)
-                            except ValueError:
-                                continue
-                        return 0.0
-                    candidates.sort(key=get_version, reverse=True)
-                    matched_bucket = candidates[0]
-                            
-            if not matched_bucket and buckets:
-                matched_bucket = buckets[0]
-                
-            if matched_bucket:
-                frac = matched_bucket.get("remainingFraction", 1.0)
-                return int(frac * 100)
+        # 2. Consultar quota (tenta produção primeiro, depois diário)
+        for url_quota in [
+            "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota",
+            "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota",
+        ]:
+            try:
+                req_quota = urllib.request.Request(
+                    url_quota,
+                    data=json.dumps({"project": "projects/-"}).encode("utf-8"),
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req_quota, timeout=1.5) as res_q:
+                    qdata   = json.loads(res_q.read().decode("utf-8"))
+                    buckets = qdata.get("buckets", [])
+
+                    # Se todos os buckets são 1.0 tenta o próximo endpoint
+                    all_full = all(b.get("remainingFraction", 1.0) >= 1.0 for b in buckets)
+                    if all_full and url_quota != "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota":
+                        continue
+
+                    matched = _match_bucket(buckets, active_model_id)
+                    if matched is not None:
+                        frac = matched.get("remainingFraction", 1.0)
+                        return int(frac * 100)
+            except Exception:
+                continue
+
     except Exception:
         pass
     return None
