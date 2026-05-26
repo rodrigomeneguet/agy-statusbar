@@ -243,14 +243,6 @@ def fetch_model_quota(active_model_id):
 
 def main():
     try:
-        # LOG DE DEPURAÇÃO DE VARIÁVEIS DE AMBIENTE DO PROCESSO PAI
-        try:
-            with open("/tmp/statusline_env.txt", "w", encoding="utf-8") as env_f:
-                for k, v in os.environ.items():
-                    env_f.write(f"{k}={v}\n")
-        except Exception:
-            pass
-
         input_data = sys.stdin.read()
         if not input_data.strip():
             return
