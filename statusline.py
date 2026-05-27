@@ -325,18 +325,30 @@ def main():
         quota_clean = ""
         quota_colored = ""
 
-        # Exibe barra de quota apenas quando a API reporta valor real (< 100%).
-        # Para planos Google One AI Pro a API sempre retorna 1.0 (100%), então
-        # exibimos o tier do plano de forma elegante em vez de uma barra falsa.
-        if quota_pct is not None and quota_pct < 100:
-            q_bar_clean, q_bar_colored, quota_alert_color = make_progress_bar_colored(quota_pct, reverse=True)
-            quota_clean = f"[Quota: {q_bar_clean} {quota_pct}%]"
-            quota_colored = f"{C_GRAY}[{C_RESET}{quota_alert_color}Quota: {C_RESET}{q_bar_colored} {quota_alert_color}{quota_pct}%{C_RESET}{C_GRAY}]{C_RESET}"
+        # O daemon envia informações do plano no JSON (ex: "Google AI Pro" ou "Free Tier")
+        plan_tier = data.get("plan_tier")
+
+        if quota_pct is not None:
+            if quota_pct < 100:
+                # Exibe barra de quota apenas se a API reportar uso (< 100%)
+                q_bar_clean, q_bar_colored, quota_alert_color = make_progress_bar_colored(quota_pct, reverse=True)
+                quota_clean = f"[Quota: {q_bar_clean} {quota_pct}%]"
+                quota_colored = f"{C_GRAY}[{C_RESET}{quota_alert_color}Quota: {C_RESET}{q_bar_colored} {quota_alert_color}{quota_pct}%{C_RESET}{C_GRAY}]{C_RESET}"
+            else:
+                # Cota está cheia (100%). Para assinantes Premium (Google One AI Pro), a API sempre retorna 1.0.
+                # Exibimos o tier do plano se estiver no payload do agy; caso contrário, mostramos "100%".
+                plan_label = plan_tier if plan_tier else "100%"
+                quota_clean = f"[{plan_label}]"
+                quota_colored = f"{C_GRAY}[{C_RESET}{C_MAGENTA}{plan_label}{C_RESET}{C_GRAY}]{C_RESET}"
         else:
-            # A API não reporta cota real → plano premium ativo (Google One AI Pro)
-            plan_label = "Google AI Pro"
-            quota_clean = f"[{plan_label}]"
-            quota_colored = f"{C_GRAY}[{C_RESET}{C_MAGENTA}{plan_label}{C_RESET}{C_GRAY}]{C_RESET}"
+            # fetch_model_quota() falhou (None) por erro de rede/token/timeout.
+            # Exibimos apenas o plan_tier do JSON se disponível; caso contrário, omitimos.
+            if plan_tier:
+                quota_clean = f"[{plan_tier}]"
+                quota_colored = f"{C_GRAY}[{C_RESET}{C_MAGENTA}{plan_tier}{C_RESET}{C_GRAY}]{C_RESET}"
+            else:
+                quota_clean = ""
+                quota_colored = ""
 
         # 5. Modelo Ativo (Direita)
         right_clean = f"◈ {model_name}"
