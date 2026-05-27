@@ -87,45 +87,6 @@ def make_progress_bar_colored(used_pct, width=8, reverse=False):
     colored_bar = f"{color}{'█' * filled}{C_GRAY}{'░' * empty}{C_RESET}"
     return clean_bar, colored_bar, color
 
-def get_model_context_size(model_name):
-    """
-    Retorna o tamanho oficial da janela de contexto com base no nome do modelo.
-    Se não for conhecido, retorna None para usar o fallback do Agy.
-    """
-    if not model_name:
-        return None
-    name_lower = model_name.lower()
-    
-    # 1. Claude (200k)
-    if "claude" in name_lower:
-        return 200000
-    
-    # 2. Gemini Pro (2.0M)
-    if "gemini" in name_lower and "pro" in name_lower:
-        return 2097152
-        
-    # 3. Gemini Flash / Flash Lite (1.0M)
-    if "gemini" in name_lower and ("flash" in name_lower or "lite" in name_lower):
-        return 1048576
-        
-    # 4. OpenAI o1 / o3 (200k)
-    if "o1-" in name_lower or "o3-" in name_lower or name_lower in ("o1", "o3"):
-        return 200000
-        
-    # 5. GPT-4o / GPT-4 (128k)
-    if "gpt-4" in name_lower or "gpt-4o" in name_lower:
-        return 128000
-        
-    # 6. DeepSeek V3 / R1 (128k)
-    if "deepseek" in name_lower:
-        return 128000
-        
-    # 7. Llama 3 (128k)
-    if "llama" in name_lower:
-        return 128000
-        
-    return None
-
 # Mapeamento de nomes de display do Agy → palavras-chave do modelId da API de quota.
 # Chave: substring do display_name em minúsculas. Valor: lista de keywords para busca.
 _DISPLAY_TO_KEYWORDS = {
@@ -344,10 +305,8 @@ def main():
         total_output = context.get("total_output_tokens") or 0
         total_used = total_input + total_output
         
-        # Obter o tamanho oficial do contexto
-        size = get_model_context_size(model_name)
-        if size is None:
-            size = context.get("context_window_size") or 1048576
+        # Obter o tamanho dinâmico e real do contexto fornecido pelo Agy daemon
+        size = context.get("context_window_size") or 0
         
         used_str = format_tokens(total_used)
         size_str = format_tokens(size) if size else "N/D"
