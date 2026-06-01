@@ -590,7 +590,7 @@ def main():
         
         icons_nerd = {
             'project-path': "",                  # Pasta (classic)
-            'git-branch': "",                    # Branch Git (classic)
+            'git-branch': "",                    # nf-dev-git (U+E725, safe no Fedora)
             'model-name': "󰚩",                    # Modelo IA
             'context-used': "",                  # Pilha de Contexto / Lista (classic)
             'token-count': "",                   # Banco de Dados / Tokens (classic)

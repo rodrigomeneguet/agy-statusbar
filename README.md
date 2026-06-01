@@ -28,7 +28,34 @@ Cada item é renderizado como uma cápsula visual `(icon Label: Valor)` com fund
 ```
 
 ### 🔠 Suporte a Nerd Fonts
-Se você tiver [Nerd Fonts](https://www.nerdfonts.com/) instalada, ative via `settings.json` para usar ícones  ao invés de emojis — ideal para terminais configurados com fontes programadoras.
+O projeto suporta nativamente [Nerd Fonts](https://www.nerdfonts.com/) para exibir ícones de terminal minimalistas e elegantes ao invés de emojis coloridos.
+
+Você pode ativá-lo respondendo `S` no instalador interativo, ou manualmente no `settings.json` definindo `"nerdFonts": true`:
+
+```json
+"ui": {
+  "statusline": {
+    "nerdFonts": true
+  }
+}
+```
+
+#### 📦 Instalação das Fontes
+
+**No Linux (Fedora/KDE/Ubuntu):**
+1. Baixe o pacote de sua fonte preferida (ex: `JetBrainsMono.tar.xz`) na página de [Releases do Nerd Fonts](https://github.com/ryanoasis/nerd-fonts/releases).
+2. Extraia os arquivos `.ttf` para a sua pasta de fontes locais: `~/.local/share/fonts/` (ou `/usr/share/fonts/` para sistema inteiro).
+3. Atualize o cache de fontes:
+   ```bash
+   fc-cache -fv ~/.local/share/fonts/
+   ```
+4. **Configuração no KDE (Konsole):** Vá em *Configurações* -> *Editar perfil atual* -> *Aparência* e selecione `JetBrainsMono Nerd Font` (tamanho recomendado: 11).
+
+**No Windows (Windows Terminal / VS Code):**
+1. Baixe a fonte `.zip` desejada em [nerdfonts.com](https://www.nerdfonts.com/font-downloads).
+2. Extraia o arquivo, selecione os arquivos de fonte, clique com o botão direito e selecione **"Instalar para todos os usuários"**.
+3. **No Windows Terminal:** Abra as Configurações (Ctrl + ,), clique no seu Perfil (ex: PowerShell ou Ubuntu), vá em *Aparência* -> *Fonte* e escolha a sua Nerd Font (ex: `JetBrainsMono NFM`).
+4. **No VS Code:** Vá em Configurações (Ctrl + ,), procure por `Terminal Font Family` e adicione `'JetBrainsMono Nerd Font'` na frente das demais.
 
 ---
 
