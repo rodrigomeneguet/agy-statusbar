@@ -384,16 +384,13 @@ def main():
             return
         
         settings = get_settings()
-        # Reduzir 20 colunas para garantir margem de segurança no alinhamento do terminal
-        term_width = max(40, (data.get("terminal_width") or 80) - 20)
-        
         fallback_model = "Gemini 3.5 Flash (Medium)"
         model_obj = data.get("model") or {}
         if model_obj.get("display_name"):
             fallback_model = model_obj["display_name"]
         elif model_obj.get("id"):
             fallback_model = model_obj["id"]
-            
+
         lang = "pt"
         if "ui" in settings and "language" in settings["ui"]:
             lang = settings["ui"]["language"]
@@ -642,7 +639,7 @@ def main():
         
         # Separadores específicos
         if theme == "capsule":
-            separator = "  "
+            separator = " "
         elif theme == "retro":
             separator = f"{GRAY}═══{RESET}"
         else: # minimal
@@ -657,11 +654,11 @@ def main():
             content_str = f"{label}: {color}{BOLD}{value}{RESET}" if item_id != "model-name" else f"{label}: {value}"
             
             if theme == "capsule":
-                pill_content = f"{BG_PILL} {color}{icon}{RESET}{BG_PILL} {content_str} "
+                pill_content = f"{BG_PILL}{color}{icon}{RESET}{BG_PILL} {content_str} "
                 if nerd_fonts:
-                    return f"{FG_CAPS}{RESET}{pill_content}{FG_CAPS}{RESET}"
+                    return f"{FG_CAPS}{RESET}{pill_content}{FG_CAPS}{RESET}"
                 else:
-                    return f"{FG_CAPS}( {RESET}{pill_content}{FG_CAPS} ){RESET}"
+                    return f"{FG_CAPS}({RESET}{pill_content}{FG_CAPS}){RESET}"
             elif theme == "retro":
                 return f"{color}[{RESET} {color}{icon}{RESET} {content_str} {color}]{RESET}"
             else: # minimal
@@ -671,9 +668,8 @@ def main():
             rendered = render_item(item_id, values[item_id], colors[item_id])
             return get_display_width(strip_ansi(rendered))
             
-        # Smart Line Wrapping (Copied from Andy's statusline-quota.mjs)
-        # O term_width do Andy desconta 15 do terminal_width
-        term_width = max(40, (data.get("terminal_width") or 80) - 15)
+        # Desconto de 4 colunas garante margem mínima sem desperdiçar espaço
+        term_width = max(40, (data.get("terminal_width") or 80) - 4)
         
         lines = []
         current_line = ""
