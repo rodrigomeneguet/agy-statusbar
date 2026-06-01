@@ -1,81 +1,144 @@
-# ⚡ Cyberpunk Neon Status Bar for Gemini/Agy CLI
+# ⚡ agy-statusbar
 
-Uma barra de status ultra-moderna, minimalista e altamente reativa (estilo *Cyberpunk Neon*) projetada exclusivamente para o novo **Agy CLI (programado em Go)**. 
+Barra de status **premium e funcional** para o **Agy CLI** (Antigravity CLI da Google), escrita em Python puro — sem dependências externas.
 
-Ela se integra de forma 100% nativa e assíncrona com os servidores da Google para exibir as suas quotas e consumo em tempo real com excelente fidelidade visual.
-
----
-
-## 🎨 Principais Recursos (UX/UI Premium)
-
-* **⌥ Workspace & Git (Esquerda):** Caminho compactado (com redução inteligente `~`) + branch e status Git `⎇` (Verde se limpo, Âmbar com asterisco se houver alterações pendentes).
-* **Emojis Dinâmicos de Estado (Centro-Esquerdo):** Transição de emojis e cores baseando-se na atividade da IA:
-  * `💤 IDLE` (verde) — Quando a IA está aguardando instruções.
-  * `🔥 BUSY` (ciano) — Quando a IA está processando ativamente tarefas.
-* **ctx: [Barra] (Centro):** Barra de progresso gráfica em blocos (`█░░░░░░░`) mostrando reativamente o consumo da sua janela de contexto (Tokens Usados / Totais), com alertas de cores de segurança (Verde ➜ Amarelo ➜ Magenta).
-* **[Quota: [Barra] X%] (Centro-Direito):** Adicionada uma barra gráfica de progresso também para a **Quota real de requisições restante do modelo ativo** nos servidores da Google via renovação de token OAuth automática e assíncrona!
-* **◈ Modelo (Direita):** Nome do modelo ativo destacado com símbolo `◈` em ciano.
+Exibe em tempo real: quota de API, contexto utilizado, modelo ativo, branch Git, RAM e muito mais — tudo em cápsulas visuais com emojis ou Nerd Fonts.
 
 ---
 
-## 📸 Demonstração Visual (No Terminal)
+## ✨ Recursos
 
-Durante a execução ativa de tarefas:
-```text
-⌥ tmp                                    🔥 BUSY                                   ctx: ██░░░░░░ 357.5k/1.0M (34.1%)                                   [Quota: ████████ 100%]                                   ◈ Gemini 3.5 Flash (Medium)
+| Item | Descrição |
+|---|---|
+| 📂 **Projeto** | Nome do diretório de trabalho atual |
+| 🌿 **Git** | Branch atual + `*` se houver alterações pendentes |
+| 🤖 **Modelo** | Modelo ativo com cor específica por provedor (Gemini 🔵, Claude 🟠, GPT 🟢) |
+| 📊 **Contexto** | % do context window utilizado + barra de progresso com alerta de cores |
+| 🪙 **Tokens** | Tokens usados / tamanho total do context window |
+| ⚡ **Disponibilidade** | Quota real restante do modelo ativo (via daemon local) |
+| ⏳ **Reset Quota** | Tempo até o próximo reset de quota |
+| 💻 **RAM** | Consumo de memória do processo do Agy CLI |
+
+### 🎨 Tema Capsule (padrão)
+Cada item é renderizado como uma cápsula visual `(icon Label: Valor)` com fundo sutil e cores semânticas:
+
+```
+(📂 Projeto: meu-app ) (🌿 Git: main ) (🤖 Modelo: Claude Sonnet 4.6 (Thinking) )
+(📊 Contexto: 5.2% ▕░░░░░░░░░░▏ ) (🪙 Tokens: 55.0k / 1.0M ) (⚡ Disponibilidade: 80% ▕████████░░▏ ) (⏳ Reset Quota: 3h 29m ) (💻 RAM: 3MB )
 ```
 
+### 🔠 Suporte a Nerd Fonts
+Se você tiver [Nerd Fonts](https://www.nerdfonts.com/) instalada, ative via `settings.json` para usar ícones  ao invés de emojis — ideal para terminais configurados com fontes programadoras.
+
 ---
 
-## 🚀 Instalação Rápida (One-Liner)
+## 🚀 Instalação
 
-Basta clonar o repositório e rodar o instalador automatizado no seu terminal (Linux ou macOS):
-
+### One-Liner
 ```bash
-git clone https://github.com/rodrigomeneguet/agy-statusbar.git /tmp/agy-statusbar && cd /tmp/agy-statusbar && chmod +x install.sh && ./install.sh && rm -rf /tmp/agy-statusbar
+git clone https://github.com/rodrigomeneguet/agy-statusbar.git /tmp/agy-statusbar \
+  && cd /tmp/agy-statusbar \
+  && python3 install.py \
+  && rm -rf /tmp/agy-statusbar
+```
+
+### Manual
+1. Copie `statusline.py` para `~/.gemini/statusline.py`
+2. Adicione ao `~/.gemini/antigravity-cli/settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "python3 /home/SEU_USUARIO/.gemini/statusline.py",
+    "enabled": true
+  }
+}
 ```
 
 ---
 
-## 🛠️ Configuração Manual
+## ⚙️ Configuração
 
-Se preferir não usar o instalador automático, siga estes passos simples:
+### Personalizar itens exibidos
 
-1. Baixe o script [statusline.py](statusline.py) e salve-o em `~/.gemini/statusline.py`.
-2. Torne-o executável no seu terminal:
-   ```bash
-   chmod +x ~/.gemini/statusline.py
-   ```
-3. Abra o arquivo de configurações da CLI em `~/.gemini/antigravity-cli/settings.json` e adicione a seguinte configuração:
-   ```json
-   "statusLine": {
-     "type": "command",
-     "command": "python3 /home/SEU_USUARIO/.gemini/statusline.py",
-     "enabled": true
-   }
-   ```
-   *(Substitua `SEU_USUARIO` pelo seu usuário correspondente no sistema).*
+No `~/.gemini/antigravity-cli/settings.json` ou `~/.gemini/settings.json`:
+
+```json
+{
+  "ui": {
+    "language": "pt",
+    "statusline": {
+      "theme": "capsule",
+      "nerdFonts": false,
+      "progressBarWidth": 10
+    },
+    "footer": {
+      "items": [
+        "project-path",
+        "git-branch",
+        "model-name",
+        "context-used",
+        "token-count",
+        "quota",
+        "quota-reset-countdown",
+        "memory-usage"
+      ]
+    }
+  }
+}
+```
+
+### Opções de `theme`
+
+| Valor | Aparência |
+|---|---|
+| `capsule` | `(icon Label: Valor)` — padrão |
+| `retro` | `[ icon Label: Valor ]` com bordas `╔╗` |
+| `minimal` | `icon Label: Valor` sem decoração |
+
+### Idiomas disponíveis (`language`)
+
+| Código | Idioma |
+|---|---|
+| `pt` | Português (padrão) |
+| `us` | English |
+| `zh-tw` | 繁體中文 |
+| `jp` | 日本語 |
 
 ---
 
-## 💡 Como Ativar na CLI
-Após a instalação, inicie a sua sessão do `agy` e digite o seguinte comando diretamente no prompt de conversação para ativá-la:
+## 🔍 Como funciona a Quota Real
 
-```bash
-/statusline on
-```
-*(Para desativar a qualquer momento, basta usar `/statusline off`).*
+O script detecta automaticamente o processo `agy` em execução via `ps auxww`, extrai a porta do servidor local gRPC e consulta o endpoint `GetUserStatus` para obter os dados reais de quota por modelo — sem precisar de tokens externos ou configuração adicional.
+
+O resultado é cacheado em `~/.gemini/tmp/real_quota_cache.json` por 30 segundos para não impactar a performance.
 
 ---
 
-## 🔧 Personalização
+## 🎨 Cores semânticas
 
-Você pode abrir o script `~/.gemini/statusline.py` e ajustar facilmente as cores ANSI no topo do arquivo para combinar com o tema do seu terminal (Catppuccin, Nord, Dracula, etc.):
+As cores mudam automaticamente de acordo com o nível:
 
-```python
-C_BLUE = '\033[38;2;137;180;250m'      # Cor do Workspace
-C_GREEN = '\033[38;2;166;227;161m'     # Alerta Seguro
-C_YELLOW = '\033[38;2;249;226;175m'    # Alerta de Atenção
-C_MAGENTA = '\033[38;2;203;166;247m'   # Alerta Crítico
-C_CYAN = '\033[38;2;137;220;235m'      # Cor do Modelo
-```
+| Faixa | Cor | Significado |
+|---|---|---|
+| ≥ 75% | 🟢 Verde | Seguro |
+| 50–74% | 🟡 Amarelo | Atenção |
+| 25–49% | 🟠 Laranja | Alerta |
+| < 25% | 🔴 Vermelho | Crítico |
+
+- **Quota / Disponibilidade:** quanto maior, melhor (verde = muito quota)
+- **Contexto utilizado:** quanto menor, melhor (verde = pouco uso)
+
+---
+
+## 🤝 Créditos
+
+- Inspirado pela implementação de quota local do repositório [AndyAWD/antigravity-cli-statusline](https://github.com/AndyAWD/antigravity-cli-statusline)
+- Portado e expandido com tema capsule, suporte multilíngue, barra de progresso e cache por conversa
+
+---
+
+## 📄 Licença
+
+MIT
