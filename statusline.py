@@ -456,10 +456,9 @@ def main():
         if context_size > 0 and total_input > 0 and not used_pct_num:
             used_pct_num = (total_input / context_size) * 100.0
             
-        remain_ctx = max(0.0, 100.0 - used_pct_num)
-        context_color = get_semantic_color(used_pct_num, reverse=False)
         used_pct = f"{used_pct_num:.1f}%"
-        total_tokens = total_input + total_output
+        context_color = get_semantic_color(used_pct_num, reverse=False)
+        total_tokens = total_input
  
         # 2. Obter informações de Quota Real a partir do cache local daemon
         cache_path = os.path.join(cache_dir, "real_quota_cache.json")
