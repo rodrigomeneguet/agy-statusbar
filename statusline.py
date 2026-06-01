@@ -5,6 +5,9 @@ import os
 import subprocess
 import urllib.request
 import urllib.parse
+import re
+import ssl
+import time
 
 # Configuração de codificação UTF-8
 if hasattr(sys.stdout, 'reconfigure'):
@@ -60,6 +63,192 @@ def get_git_info(directory):
         return branch_name, is_dirty
     except Exception:
         return None, False
+
+def find_agy_processes():
+    candidates = []
+    try:
+        for pid_dir in os.listdir("/proc"):
+            if not pid_dir.isdigit():
+                continue
+            pid = int(pid_dir)
+            try:
+                with open(f"/proc/{pid}/cmdline", "r", encoding="utf-8", errors="ignore") as f:
+                    cmdline = f.read().replace("\x00", " ")
+                
+                lower = cmdline.lower()
+                is_cli = "agy " in lower or lower.endswith("agy")
+                is_lang = "language_server" in lower
+                
+                if not is_cli and not is_lang:
+                    continue
+                
+                csrf_token = ""
+                token_match = re.search(r"--csrf_token(?:=|\s+)([^\s\"']+)", cmdline)
+                if token_match:
+                    csrf_token = token_match.group(1)
+                
+                score = (40 if is_cli else 0) + (20 if is_lang else 0) + (10 if csrf_token else 0)
+                
+                candidates.append({
+                    "pid": pid,
+                    "csrf_token": csrf_token,
+                    "score": score,
+                    "kind": "cli" if is_cli else "language_server"
+                })
+            except Exception:
+                continue
+    except Exception:
+        pass
+    
+    candidates.sort(key=lambda x: x["score"], reverse=True)
+    return candidates
+
+def get_listening_ports(pid):
+    ports = []
+    try:
+        with open(f"/proc/{pid}/net/tcp", "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        
+        for line in lines[1:]:
+            parts = line.strip().split()
+            if len(parts) < 4:
+                continue
+            
+            state = parts[3]
+            if state != "0A":
+                continue
+            
+            local_addr = parts[1]
+            if ":" not in local_addr:
+                continue
+            
+            ip_hex, port_hex = local_addr.split(":")
+            port = int(port_hex, 16)
+            
+            if port not in ports:
+                ports.append(port)
+    except Exception:
+        try:
+            out = subprocess.check_output(
+                ["lsof", "-nP", "-a", "-p", str(pid), "-iTCP", "-sTCP:LISTEN"],
+                text=True,
+                stderr=subprocess.PIPE
+            )
+            matches = re.findall(r":(\d+)\s+\(LISTEN\)", out)
+            for m in matches:
+                port = int(m)
+                if port not in ports:
+                    ports.append(port)
+        except Exception:
+            pass
+            
+    return sorted(ports)
+
+def request_user_status(port, csrf_token):
+    url = f"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetUserStatus"
+    payload = {
+        "metadata": {
+            "ideName": "antigravity",
+            "extensionName": "antigravity",
+            "locale": "en"
+        }
+    }
+    
+    ctx = ssl._create_unverified_context()
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Connect-Protocol-Version": "1",
+            "X-Codeium-Csrf-Token": csrf_token
+        },
+        method="POST"
+    )
+    
+    with urllib.request.urlopen(req, context=ctx, timeout=1.8) as res:
+        return json.loads(res.read().decode("utf-8"))
+
+def format_reset_time(reset_time_str):
+    try:
+        from datetime import datetime, timezone
+        ts = reset_time_str.replace("Z", "+00:00")
+        reset_dt = datetime.fromisoformat(ts)
+        now_dt = datetime.now(timezone.utc)
+        
+        diff_seconds = int((reset_dt - now_dt).total_seconds())
+        if diff_seconds <= 0:
+            return "agora"
+            
+        minutes = (diff_seconds + 59) // 60
+        if minutes < 60:
+            return f"{minutes}m"
+            
+        hours = minutes // 60
+        mins = minutes % 60
+        if hours >= 24:
+            days = hours // 24
+            rem_hours = hours % 24
+            return f"{days}d {rem_hours}h" if rem_hours else f"{days}d"
+            
+        return f"{hours}h {mins}m" if mins else f"{hours}h"
+    except Exception:
+        return ""
+
+def fetch_live_quota():
+    candidates = find_agy_processes()
+    all_models = {}
+    
+    for info in candidates:
+        ports = get_listening_ports(info["pid"])
+        for port in ports:
+            try:
+                response = request_user_status(port, info["csrf_token"])
+                user_status = response.get("userStatus") or {}
+                cascade = user_status.get("cascadeModelConfigData") or {}
+                
+                for model_cfg in cascade.get("clientModelConfigs") or []:
+                    quota_info = model_cfg.get("quotaInfo")
+                    if not quota_info:
+                        continue
+                    
+                    fraction = 1.0
+                    if "remainingFraction" in quota_info:
+                        fraction = float(quota_info["remainingFraction"])
+                    elif "resetTime" in quota_info:
+                        fraction = 0.0
+                    else:
+                        continue
+                    
+                    model_obj = model_cfg.get("modelOrAlias") or {}
+                    model_id = model_obj.get("model") or "Unknown"
+                    label = model_cfg.get("label") or model_id
+                    
+                    remaining_percentage = max(0.0, min(100.0, fraction * 100.0))
+                    
+                    entry = {
+                        "name": label,
+                        "remaining_percentage": remaining_percentage
+                    }
+                    
+                    if "resetTime" in quota_info:
+                        entry["reset_time"] = quota_info["resetTime"]
+                        entry["refreshes_in"] = format_reset_time(quota_info["resetTime"])
+                        
+                    norm_key = "".join(c for c in label.lower() if c.isalnum())
+                    
+                    if norm_key not in all_models or remaining_percentage < all_models[norm_key]["remaining_percentage"]:
+                        all_models[norm_key] = entry
+            except Exception:
+                continue
+                
+    if all_models:
+        return {
+            "models": all_models,
+            "updatedAt": int(time.time() * 1000)
+        }
+    return None
 
 def get_context_color(pct):
     if pct < 35:
@@ -319,8 +508,74 @@ def main():
         mid2_clean = f"ctx: {progress_bar_clean} {used_str}/{size_str} ({percent_used:.1f}%)"
         mid2_colored = f"{C_GRAY}ctx: {C_RESET}{progress_bar_colored} {C_GRAY}{used_str}/{size_str}{C_RESET} {context_alert_color}({percent_used:.1f}%){C_RESET}"
 
-        # 4. Quota Real do Modelo (Centro Direito)
-        quota_pct = fetch_model_quota(model_name)
+        # 4. Quota Real do Modelo (Centro Direito - Estilo AndyAWD)
+        cache_dir = os.path.expanduser("~/.gemini/tmp")
+        cache_path = os.path.join(cache_dir, "real_quota_cache.json")
+        
+        need_update = True
+        cache_data = None
+        
+        try:
+            if os.path.exists(cache_path):
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                # Atualizar a cada 30 segundos
+                if int(time.time() * 1000) - cache_data.get("updatedAt", 0) < 30000:
+                    need_update = False
+        except Exception:
+            pass
+            
+        if need_update:
+            try:
+                # Spawna a si mesmo em background com a flag --fetch-quota
+                script_path = os.path.abspath(__file__)
+                subprocess.Popen(
+                    [sys.executable, script_path, "--fetch-quota"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
+                )
+            except Exception:
+                pass
+
+        norm_model = "".join(c for c in model_name.lower() if c.isalnum())
+        model_quota = None
+        quota_pct = None
+        refreshes_in = None
+        
+        if cache_data and "models" in cache_data:
+            models_cache = cache_data["models"]
+            # 1. Match exato
+            if norm_model in models_cache:
+                model_quota = models_cache[norm_model]
+            else:
+                # 2. Substring
+                for k, v in models_cache.items():
+                    if norm_model in k or k in norm_model:
+                        model_quota = v
+                        break
+            
+            # 3. Match de família/provedor (Gemini, Claude, GPT)
+            if not model_quota:
+                for family in ["claude", "gemini", "gpt"]:
+                    if family in norm_model:
+                        for k, v in models_cache.items():
+                            if family in k:
+                                if not model_quota or v["remaining_percentage"] < model_quota["remaining_percentage"]:
+                                    model_quota = v
+                                    
+            # 4. Fallback final: menor cota encontrada no cache
+            if not model_quota:
+                all_vals = list(models_cache.values())
+                if all_vals:
+                    model_quota = min(all_vals, key=lambda x: x["remaining_percentage"])
+
+        if model_quota:
+            quota_pct = int(model_quota["remaining_percentage"])
+            refreshes_in = model_quota.get("refreshes_in")
+        else:
+            # Fallback para o fetch_model_quota original da API
+            quota_pct = fetch_model_quota(model_name)
 
         quota_clean = ""
         quota_colored = ""
@@ -330,19 +585,17 @@ def main():
 
         if quota_pct is not None:
             if quota_pct < 100:
-                # Exibe barra de quota apenas se a API reportar uso (< 100%)
+                # Exibe barra de quota com countdown se disponível
                 q_bar_clean, q_bar_colored, quota_alert_color = make_progress_bar_colored(quota_pct, reverse=True)
-                quota_clean = f"[Quota: {q_bar_clean} {quota_pct}%]"
-                quota_colored = f"{C_GRAY}[{C_RESET}{quota_alert_color}Quota: {C_RESET}{q_bar_colored} {quota_alert_color}{quota_pct}%{C_RESET}{C_GRAY}]{C_RESET}"
+                countdown_suffix = f" ({refreshes_in})" if refreshes_in else ""
+                quota_clean = f"[Quota: {q_bar_clean} {quota_pct}%{countdown_suffix}]"
+                quota_colored = f"{C_GRAY}[{C_RESET}{quota_alert_color}Quota: {C_RESET}{q_bar_colored} {quota_alert_color}{quota_pct}%{countdown_suffix}{C_RESET}{C_GRAY}]{C_RESET}"
             else:
-                # Cota está cheia (100%). Para assinantes Premium (Google One AI Pro), a API sempre retorna 1.0.
-                # Exibimos o tier do plano se estiver no payload do agy; caso contrário, mostramos "100%".
+                # Cota está cheia (100%). Exibimos o tier do plano se disponível
                 plan_label = plan_tier if plan_tier else "100%"
                 quota_clean = f"[{plan_label}]"
                 quota_colored = f"{C_GRAY}[{C_RESET}{C_MAGENTA}{plan_label}{C_RESET}{C_GRAY}]{C_RESET}"
         else:
-            # fetch_model_quota() falhou (None) por erro de rede/token/timeout.
-            # Exibimos apenas o plan_tier do JSON se disponível; caso contrário, omitimos.
             if plan_tier:
                 quota_clean = f"[{plan_tier}]"
                 quota_colored = f"{C_GRAY}[{C_RESET}{C_MAGENTA}{plan_tier}{C_RESET}{C_GRAY}]{C_RESET}"
@@ -391,4 +644,17 @@ def main():
         sys.stderr.write(f"statusline: erro inesperado: {e}\n")
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--fetch-quota":
+        try:
+            cache = fetch_live_quota()
+            if cache:
+                cache_dir = os.path.expanduser("~/.gemini/tmp")
+                os.makedirs(cache_dir, exist_ok=True)
+                cache_path = os.path.join(cache_dir, "real_quota_cache.json")
+                with open(cache_path, "w", encoding="utf-8") as f:
+                    json.dump(cache, f, indent=2)
+        except Exception:
+            pass
+        sys.exit(0)
+    else:
+        main()
