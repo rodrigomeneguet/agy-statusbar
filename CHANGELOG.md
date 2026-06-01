@@ -11,7 +11,14 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
-## [1.3.0] — 2026-06-01
+## [1.4.0] — 2026-06-01
+
+### ✅ Corrigido
+- **Conflito de ícone Git branch:** Substituído o caractere Nerd Font de Git branch de `\ue0a0` para `\ue725` (`nf-dev-git`). Isso resolve o bug de renderização no Fedora Linux, onde a fonte de sistema *Adwaita Sans* sobrescrevia o caractere de ramificação da Nerd Font por padrão.
+
+### 🎨 Melhorado
+- **Instalador Interativo:** `install.py` agora detecta se o usuário deseja ativar Nerd Fonts e adiciona `"ui": {"statusline": {"nerdFonts": true}}` de forma automática nos arquivos `settings.json` localizados.
+- **Guia de Instalação no README:** Adicionadas instruções passo a passo para instalação e configuração de Nerd Fonts no Linux (Fedora/KDE) e Windows (Terminal/VS Code).
 
 ### ✅ Corrigido
 - **Bug crítico de renderização:** todos os itens da barra sumiam exceto o último. Causa: `current_line = to_add` substituía a linha acumulada a cada iteração em vez de concatenar (`current_line += to_add`).

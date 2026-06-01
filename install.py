@@ -40,6 +40,29 @@ def main():
         os.path.join(gemini_dir, "settings.json")
     ]
     
+    # Configuração de Nerd Fonts
+    enable_nerdfonts = False
+    
+    # 1. Verificar argumentos de linha de comando
+    if "--nerd-fonts" in sys.argv:
+        enable_nerdfonts = True
+    elif "--no-nerd-fonts" in sys.argv:
+        enable_nerdfonts = False
+    # 2. Verificar variável de ambiente
+    elif os.environ.get("ENABLE_NERDFONTS") is not None:
+        enable_nerdfonts = os.environ.get("ENABLE_NERDFONTS").lower() in ['true', '1', 'yes', 'y']
+    # 3. Perguntar interativamente se for um TTY
+    elif sys.stdin.isatty():
+        try:
+            print(f"\n{C_CYAN}Configuração Visual:{C_RESET}")
+            print("O agy-statusbar suporta ícones tradicionais de Nerd Fonts de forma compacta.")
+            nerd_choice = input("Deseja ativar o suporte a Nerd Fonts por padrão? (S/N): ").strip().lower()
+            enable_nerdfonts = nerd_choice in ['s', 'sim', 'y', 'yes']
+        except EOFError:
+            print(f"{C_YELLOW}Instalação não interativa detectada (EOF). Mantendo Nerd Fonts desativadas por padrão.{C_RESET}")
+    else:
+        print(f"{C_YELLOW}Instalação não interativa detectada. Mantendo Nerd Fonts desativadas por padrão.{C_RESET}")
+
     configured = False
     for spath in settings_paths:
         if os.path.exists(spath):
@@ -52,6 +75,13 @@ def main():
                     "command": f"python3 {dest_script}",
                     "enabled": True
                 }
+                
+                # Configurar Nerd Fonts no settings.json
+                if "ui" not in data:
+                    data["ui"] = {}
+                if "statusline" not in data["ui"]:
+                    data["ui"]["statusline"] = {}
+                data["ui"]["statusline"]["nerdFonts"] = enable_nerdfonts
                 
                 with open(spath, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)

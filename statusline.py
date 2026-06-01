@@ -475,10 +475,9 @@ def main():
         except Exception:
             pass
             
-        if need_update:
+        if need_update and not os.environ.get("DISABLE_QUOTA_HOOK"):
             try:
                 script_path = os.path.abspath(__file__)
-                # Passa DISABLE_QUOTA_HOOK=1 para evitar loop recursivo (método Andy)
                 env = os.environ.copy()
                 env["DISABLE_QUOTA_HOOK"] = "1"
                 subprocess.Popen(
@@ -590,7 +589,7 @@ def main():
         
         icons_nerd = {
             'project-path': "",                  # Pasta (classic)
-            'git-branch': "",                    # Branch Git (classic)
+            'git-branch': "",                    # nf-dev-git (U+E725, safe no Fedora)
             'model-name': "󰚩",                    # Modelo IA
             'context-used': "",                  # Pilha de Contexto / Lista (classic)
             'token-count': "",                   # Banco de Dados / Tokens (classic)
@@ -711,9 +710,6 @@ def main():
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--fetch-quota":
-        # Guard contra loop recursivo (método Andy)
-        if os.environ.get("DISABLE_QUOTA_HOOK"):
-            sys.exit(0)
         try:
             cache = fetch_live_quota()
             if cache:
