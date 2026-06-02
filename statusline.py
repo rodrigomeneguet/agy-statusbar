@@ -384,7 +384,7 @@ def get_settings():
             try:
                 with open(spath, "r", encoding="utf-8") as f:
                     settings.update(json.load(f))
-            except (json.JSONDecodeError, OSError) as e:
+            except (json.JSONDecodeError, OSError, ValueError, TypeError) as e:
                 _log(f"failed to read settings from {spath}: {e}")
                 
     # Ler configurações do projeto
@@ -397,7 +397,7 @@ def get_settings():
                     if "ui" not in settings:
                         settings["ui"] = {}
                     settings["ui"].update(proj_settings["ui"])
-        except (json.JSONDecodeError, OSError) as e:
+        except (json.JSONDecodeError, OSError, ValueError, TypeError) as e:
             _log(f"failed to read project settings: {e}")
             
     # Ler configuração dedicada da statusline para evitar limpeza automática pelo Agy
@@ -416,7 +416,7 @@ def get_settings():
                 for k, v in custom_config.items():
                     if k != "statusline":
                         settings["ui"]["statusline"][k] = v
-        except (json.JSONDecodeError, OSError) as e:
+        except (json.JSONDecodeError, OSError, ValueError, TypeError) as e:
             _log(f"failed to read statusline config: {e}")
             
     return settings
