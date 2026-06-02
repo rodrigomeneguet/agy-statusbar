@@ -20,9 +20,21 @@ def main():
     gemini_dir = os.path.join(home, ".gemini")
     cli_dir = os.path.join(gemini_dir, "antigravity-cli")
     
+    # Criar diretórios automaticamente se não existirem
     if not os.path.exists(gemini_dir):
-        print(f"\033[31mErro: Diretório ~/.gemini não encontrado. O Agy está instalado?{C_RESET}")
-        sys.exit(1)
+        try:
+            os.makedirs(gemini_dir, exist_ok=True)
+            print(f"{C_YELLOW}Aviso: Diretório ~/.gemini não existia e foi criado automaticamente.{C_RESET}")
+        except Exception as e:
+            print(f"\033[31mErro ao criar ~/.gemini: {e}{C_RESET}")
+            sys.exit(1)
+            
+    if not os.path.exists(cli_dir):
+        try:
+            os.makedirs(cli_dir, exist_ok=True)
+            print(f"{C_YELLOW}Aviso: Diretório ~/.gemini/antigravity-cli não existia e foi criado automaticamente.{C_RESET}")
+        except Exception:
+            pass
 
     # 1. Copiar o script
     dest_script = os.path.join(gemini_dir, "statusline.py")
@@ -65,8 +77,15 @@ def main():
 
     configured = False
     for spath in settings_paths:
-        if os.path.exists(spath):
-            try:
+        try:
+            # Inicializar settings.json vazio se não existir mas a pasta pai sim
+            if not os.path.exists(spath):
+                parent_dir = os.path.dirname(spath)
+                if os.path.exists(parent_dir):
+                    with open(spath, "w", encoding="utf-8") as f:
+                        json.dump({}, f)
+                        
+            if os.path.exists(spath):
                 with open(spath, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 
@@ -87,9 +106,27 @@ def main():
                     json.dump(data, f, indent=2, ensure_ascii=False)
                 print(f"{C_GREEN}✔ settings.json atualizado com sucesso em: {spath}{C_RESET}")
                 configured = True
-            except Exception as e:
-                print(f"{C_YELLOW}Aviso: Não foi possível atualizar {spath}: {e}{C_RESET}")
+        except Exception as e:
+            print(f"{C_YELLOW}Aviso: Não foi possível atualizar {spath}: {e}{C_RESET}")
     
+    # Escrever também no arquivo de configuração dedicado para evitar que o Agy limpe as chaves
+    statusline_cfg_path = os.path.join(gemini_dir, "statusline_config.json")
+    try:
+        cfg_data = {}
+        if os.path.exists(statusline_cfg_path):
+            with open(statusline_cfg_path, "r", encoding="utf-8") as f:
+                cfg_data = json.load(f)
+        
+        if "statusline" not in cfg_data:
+            cfg_data["statusline"] = {}
+        cfg_data["statusline"]["nerdFonts"] = enable_nerdfonts
+        
+        with open(statusline_cfg_path, "w", encoding="utf-8") as f:
+            json.dump(cfg_data, f, indent=2, ensure_ascii=False)
+        print(f"{C_GREEN}✔ statusline_config.json atualizado com sucesso em: {statusline_cfg_path}{C_RESET}")
+    except Exception as e:
+        print(f"{C_YELLOW}Aviso: Não foi possível gravar o arquivo dedicado {statusline_cfg_path}: {e}{C_RESET}")
+        
     if not configured:
         print(f"{C_YELLOW}Aviso: Nenhum settings.json encontrado para atualizar automaticamente.{C_RESET}")
         print("Crie a configuração manualmente em ~/.gemini/antigravity-cli/settings.json:")

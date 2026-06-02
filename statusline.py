@@ -369,6 +369,27 @@ def get_settings():
         except Exception:
             pass
             
+    # Ler configuração dedicada da statusline para evitar limpeza automática pelo Agy
+    statusline_config_path = os.path.join(home, ".gemini", "statusline_config.json")
+    if os.path.exists(statusline_config_path):
+        try:
+            with open(statusline_config_path, "r", encoding="utf-8") as f:
+                custom_config = json.load(f)
+                if "ui" not in settings:
+                    settings["ui"] = {}
+                if "statusline" not in settings["ui"]:
+                    settings["ui"]["statusline"] = {}
+                
+                # Suporta tanto chaves aninhadas {"statusline": {"nerdFonts": true}}
+                # quanto chaves diretas no arquivo {"nerdFonts": true}
+                if "statusline" in custom_config:
+                    settings["ui"]["statusline"].update(custom_config["statusline"])
+                for k, v in custom_config.items():
+                    if k != "statusline":
+                        settings["ui"]["statusline"][k] = v
+        except Exception:
+            pass
+            
     return settings
 
 def main():
