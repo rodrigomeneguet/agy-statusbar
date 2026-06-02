@@ -20,7 +20,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Instalar dependências de desenvolvimento
-pip install -e ".[dev]"
+# Nota: requer pyproject.toml (PR #8). Se não existir, instale manualmente:
+pip install pytest pytest-cov ruff mypy
 ```
 
 ## Executando Testes
