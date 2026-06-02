@@ -68,7 +68,7 @@ def main():
         try:
             print(f"\n{C_CYAN}Configuração Visual:{C_RESET}")
             print("O agy-statusbar suporta ícones tradicionais de Nerd Fonts de forma compacta.")
-            nerd_choice = input("Deseja ativar o suporte a Nerd Fonts por padrão? (S/N): ").strip().lower()
+            nerd_choice = input("Deseja ativar o suporte a Nerd Fonts? [s/N]: ").strip().lower()
             enable_nerdfonts = nerd_choice in ['s', 'sim', 'y', 'yes']
         except EOFError:
             print(f"{C_YELLOW}Instalação não interativa detectada (EOF). Mantendo Nerd Fonts desativadas por padrão.{C_RESET}")
