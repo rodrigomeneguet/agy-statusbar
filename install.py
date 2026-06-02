@@ -54,7 +54,7 @@ def main():
     ]
     
     # Configuração de Nerd Fonts
-    enable_nerdfonts = False
+    enable_nerdfonts = None
     
     # 1. Verificar argumentos de linha de comando
     if "--nerd-fonts" in sys.argv:
@@ -72,9 +72,9 @@ def main():
             nerd_choice = input("Deseja ativar o suporte a Nerd Fonts? [s/N]: ").strip().lower()
             enable_nerdfonts = nerd_choice in ['s', 'sim', 'y', 'yes']
         except EOFError:
-            print(f"{C_YELLOW}Instalação não interativa detectada (EOF). Mantendo Nerd Fonts desativadas por padrão.{C_RESET}")
+            print(f"{C_YELLOW}Instalação não interativa detectada (EOF). Preservando configurações existentes.{C_RESET}")
     else:
-        print(f"{C_YELLOW}Instalação não interativa detectada. Mantendo Nerd Fonts desativadas por padrão.{C_RESET}")
+        print(f"{C_YELLOW}Instalação não interativa detectada. Preservando configurações existentes.{C_RESET}")
 
     configured = False
     for spath in settings_paths:
@@ -101,7 +101,10 @@ def main():
                     data["ui"] = {}
                 if "statusline" not in data["ui"]:
                     data["ui"]["statusline"] = {}
-                data["ui"]["statusline"]["nerdFonts"] = enable_nerdfonts
+                if enable_nerdfonts is not None:
+                    data["ui"]["statusline"]["nerdFonts"] = enable_nerdfonts
+                elif "nerdFonts" not in data["ui"]["statusline"]:
+                    data["ui"]["statusline"]["nerdFonts"] = False
                 
                 with open(spath, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
@@ -120,7 +123,10 @@ def main():
         
         if "statusline" not in cfg_data:
             cfg_data["statusline"] = {}
-        cfg_data["statusline"]["nerdFonts"] = enable_nerdfonts
+        if enable_nerdfonts is not None:
+            cfg_data["statusline"]["nerdFonts"] = enable_nerdfonts
+        elif "nerdFonts" not in cfg_data["statusline"]:
+            cfg_data["statusline"]["nerdFonts"] = False
         
         with open(statusline_cfg_path, "w", encoding="utf-8") as f:
             json.dump(cfg_data, f, indent=2, ensure_ascii=False)
