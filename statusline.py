@@ -38,7 +38,6 @@ def format_tokens(n):
 
 def get_git_branch(lang):
     try:
-        # Obter a branch atual
         branch_proc = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             stdout=subprocess.PIPE,
@@ -48,7 +47,8 @@ def get_git_branch(lang):
         )
         if branch_proc.returncode == 0:
             branch = branch_proc.stdout.strip()
-            # Verificar se há modificações
+            if not branch:
+                branch = "HEAD"
             status_proc = subprocess.run(
                 ["git", "status", "--porcelain"],
                 stdout=subprocess.PIPE,
@@ -316,19 +316,21 @@ def get_model_color(name):
     return BLUE
 
 def strip_ansi(s):
-    return re.sub(r'[\u001b\u009b][\[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]', '', s)
+    """Remove all ANSI escape sequences from a string."""
+    return re.sub(r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\][^\x07\x1b]*?(?:\x07|\x1b\\)', '', s)
 
 def get_display_width(s):
+    """Calculate display width handling emojis, PUA, and East Asian characters."""
     import unicodedata
     width = 0
     for char in s:
         cp = ord(char)
-        # Private Use Area (PUA) e Supplementary PUA-A/B para Nerd Fonts / Powerline
+        # Private Use Area (PUA) and Supplementary PUA-A/B for Nerd Fonts / Powerline
         if (0xE000 <= cp <= 0xF8FF) or (0xF0000 <= cp <= 0x10FFFD):
             width += 2
             continue
-        # Emojis e Símbolos de alta definição/largos (2 colunas no terminal)
-        if (0x1F300 <= cp <= 0x1F9FF) or (0x1F600 <= cp <= 0x1F64F) or (0x2600 <= cp <= 0x27BF) or (0x1F000 <= cp <= 0x1F9FF):
+        # Emojis and wide symbols (2 columns in terminal)
+        if (0x1F000 <= cp <= 0x1F9FF) or (0x2600 <= cp <= 0x27BF):
             width += 2
             continue
         w = unicodedata.east_asian_width(char)

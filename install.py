@@ -38,8 +38,9 @@ def main():
 
     # 1. Copiar o script
     dest_script = os.path.join(gemini_dir, "statusline.py")
+    source_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "statusline.py")
     try:
-        shutil.copy("statusline.py", dest_script)
+        shutil.copy(source_script, dest_script)
         os.chmod(dest_script, 0o755)
         print(f"{C_GREEN}✔ statusline.py copiado para {dest_script} e marcado como executável.{C_RESET}")
     except Exception as e:
