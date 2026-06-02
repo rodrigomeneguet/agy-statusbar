@@ -4,10 +4,25 @@ import json
 import os
 import subprocess
 import urllib.request
+import urllib.error
 import urllib.parse
 import re
 import ssl
 import time
+
+# Cache TTL in milliseconds (30 seconds)
+CACHE_TTL_MS = 30000
+
+# Subprocess timeouts in seconds
+GIT_TIMEOUT = 0.8
+PS_TIMEOUT = 2.0
+LSOF_TIMEOUT = 2.0
+HTTP_TIMEOUT = 1.8
+
+
+def _log(msg):
+    """Log diagnostic messages to stderr."""
+    sys.stderr.write(f"statusline: {msg}\n")
 
 # Configuração de codificação UTF-8
 if hasattr(sys.stdout, 'reconfigure'):
@@ -38,28 +53,30 @@ def format_tokens(n):
 
 def get_git_branch(lang):
     try:
-        # Obter a branch atual
         branch_proc = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=0.8
+            timeout=GIT_TIMEOUT
         )
         if branch_proc.returncode == 0:
             branch = branch_proc.stdout.strip()
-            # Verificar se há modificações
             status_proc = subprocess.run(
                 ["git", "status", "--porcelain"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=0.8
+                timeout=GIT_TIMEOUT
             )
             is_dirty = bool(status_proc.stdout.strip())
             return f"{branch}*" if is_dirty else branch
-    except Exception:
-        pass
+    except FileNotFoundError:
+        pass  # git not installed
+    except subprocess.TimeoutExpired:
+        _log("git branch detection timed out")
+    except Exception as e:
+        _log(f"git branch error: {e}")
     
     if lang == 'zh-tw':
         return '無版本控制'
@@ -79,7 +96,7 @@ def get_cli_memory_mb():
                         parts = line.split()
                         if len(parts) >= 2:
                             return int(parts[1]) // 1024
-    except Exception:
+    except (FileNotFoundError, PermissionError, ValueError, OSError):
         pass
     try:
         if os.path.exists("/proc/self/status"):
@@ -89,7 +106,7 @@ def get_cli_memory_mb():
                         parts = line.split()
                         if len(parts) >= 2:
                             return int(parts[1]) // 1024
-    except Exception:
+    except (FileNotFoundError, PermissionError, ValueError, OSError):
         pass
     return 0
 
@@ -104,12 +121,11 @@ def find_agy_processes():
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=2.0
+            timeout=PS_TIMEOUT
         )
         lines = result.stdout.split("\n")
         for line in lines:
             lower = line.lower()
-            # Regex preciso: \bagy(\s|$) evita falso-positivo com processos que contêm 'agy' no meio
             is_cli = bool(re.search(r'\bagy(\s|$)', lower)) or "antigravity" in lower
             is_lang = "language_server" in lower
             if not is_cli and not is_lang:
@@ -127,7 +143,6 @@ def find_agy_processes():
             if token_match:
                 csrf_token = token_match.group(1)
 
-            # Penaliza app empacotado (macOS .app bundle)
             penalty = 10 if "/applications/antigravity.app" in lower else 0
             score = (40 if is_cli else 0) + (20 if is_lang else 0) + (10 if csrf_token else 0) - penalty
 
@@ -137,8 +152,12 @@ def find_agy_processes():
                 "score": score,
                 "kind": "cli" if is_cli else "language_server"
             })
-    except Exception:
-        pass
+    except FileNotFoundError:
+        _log("'ps' command not found — quota detection disabled")
+    except subprocess.TimeoutExpired:
+        _log("process detection timed out")
+    except Exception as e:
+        _log(f"process detection error: {e}")
 
     candidates.sort(key=lambda x: x["score"], reverse=True)
     return candidates
@@ -151,18 +170,27 @@ def get_listening_ports(pid):
             ["lsof", "-nP", "-a", "-p", str(pid), "-iTCP", "-sTCP:LISTEN"],
             text=True,
             stderr=subprocess.PIPE,
-            timeout=2.0
+            timeout=LSOF_TIMEOUT
         )
         matches = re.findall(r":(\d+)\s+\(LISTEN\)", out)
         for m in matches:
             port = int(m)
             if port not in ports:
                 ports.append(port)
-    except Exception:
-        pass
+    except FileNotFoundError:
+        _log("'lsof' command not found — port detection disabled")
+    except subprocess.TimeoutExpired:
+        _log(f"lsof timed out for pid {pid}")
+    except (subprocess.CalledProcessError, ValueError):
+        pass  # lsof returns non-zero when no matches, or parse error
+    except Exception as e:
+        _log(f"port detection error: {e}")
     return sorted(ports)
 
 def request_user_status(port, csrf_token):
+    if not isinstance(port, int) or port <= 0 or port > 65535:
+        raise ValueError(f"invalid port: {port}")
+
     url = f"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetUserStatus"
     payload = {
         "metadata": {
@@ -172,6 +200,7 @@ def request_user_status(port, csrf_token):
         }
     }
 
+    # SSL verification disabled: this is a localhost gRPC-to-JSON gateway
     ctx = ssl._create_unverified_context()
     req = urllib.request.Request(
         url,
@@ -185,7 +214,7 @@ def request_user_status(port, csrf_token):
         method="POST"
     )
 
-    with urllib.request.urlopen(req, context=ctx, timeout=1.8) as res:
+    with urllib.request.urlopen(req, context=ctx, timeout=HTTP_TIMEOUT) as res:
         return json.loads(res.read().decode("utf-8"))
 
 def format_reset_time(reset_time_str):
@@ -235,7 +264,6 @@ def fetch_live_quota():
                     if "remainingFraction" in quota_info:
                         fraction = float(quota_info["remainingFraction"])
                     elif "resetTime" in quota_info:
-                        # Se tiver resetTime mas não tiver remainingFraction, significa que o protobuf omitiu o 0
                         fraction = 0.0
                     else:
                         continue
@@ -260,7 +288,11 @@ def fetch_live_quota():
 
                     if norm_key not in all_models or remaining_percentage < all_models[norm_key]["remaining_percentage"]:
                         all_models[norm_key] = entry
-            except Exception:
+            except (urllib.error.URLError, ssl.SSLError, ConnectionError, OSError) as e:
+                _log(f"quota fetch failed for port {port}: {e}")
+                continue
+            except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+                _log(f"quota parse error for port {port}: {e}")
                 continue
 
     if all_models:
@@ -352,8 +384,8 @@ def get_settings():
             try:
                 with open(spath, "r", encoding="utf-8") as f:
                     settings.update(json.load(f))
-            except Exception:
-                pass
+            except (json.JSONDecodeError, OSError, ValueError, TypeError) as e:
+                _log(f"failed to read settings from {spath}: {e}")
                 
     # Ler configurações do projeto
     if os.path.exists(project_path):
@@ -361,13 +393,12 @@ def get_settings():
             with open(project_path, "r", encoding="utf-8") as f:
                 proj_settings = json.load(f)
                 settings.update(proj_settings)
-                # Fazer merge inteligente de ui.footer
                 if "ui" in proj_settings:
                     if "ui" not in settings:
                         settings["ui"] = {}
                     settings["ui"].update(proj_settings["ui"])
-        except Exception:
-            pass
+        except (json.JSONDecodeError, OSError, ValueError, TypeError) as e:
+            _log(f"failed to read project settings: {e}")
             
     # Ler configuração dedicada da statusline para evitar limpeza automática pelo Agy
     statusline_config_path = os.path.join(home, ".gemini", "statusline_config.json")
@@ -380,15 +411,13 @@ def get_settings():
                 if "statusline" not in settings["ui"]:
                     settings["ui"]["statusline"] = {}
                 
-                # Suporta tanto chaves aninhadas {"statusline": {"nerdFonts": true}}
-                # quanto chaves diretas no arquivo {"nerdFonts": true}
                 if "statusline" in custom_config:
                     settings["ui"]["statusline"].update(custom_config["statusline"])
                 for k, v in custom_config.items():
                     if k != "statusline":
                         settings["ui"]["statusline"][k] = v
-        except Exception:
-            pass
+        except (json.JSONDecodeError, OSError, ValueError, TypeError) as e:
+            _log(f"failed to read statusline config: {e}")
             
     return settings
 
@@ -401,7 +430,11 @@ def main():
         try:
             data = json.loads(input_data)
         except json.JSONDecodeError as je:
-            sys.stderr.write(f"statusline: erro de decodificação JSON: {je}\n")
+            _log(f"JSON decode error: {je}")
+            return
+
+        if not isinstance(data, dict):
+            _log("input is not a JSON object")
             return
         
         settings = get_settings()
@@ -460,7 +493,7 @@ def main():
                         total_output = cached_ctx.get("total_output_tokens") or 0
                         if cached_ctx.get("used_percentage"):
                             used_pct_num = float(cached_ctx["used_percentage"])
-            except Exception:
+            except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
                 pass
         else:
             try:
@@ -471,8 +504,8 @@ def main():
                         "total_output_tokens": total_output,
                         "used_percentage": used_pct_num
                     }, f, indent=2)
-            except Exception:
-                pass
+            except (OSError, IOError) as e:
+                _log(f"failed to write context cache: {e}")
                 
         if context_size > 0 and total_input > 0 and not used_pct_num:
             used_pct_num = (total_input / context_size) * 100.0
@@ -490,9 +523,9 @@ def main():
             if os.path.exists(cache_path):
                 with open(cache_path, "r", encoding="utf-8") as f:
                     cache_data = json.load(f)
-                if int(time.time() * 1000) - cache_data.get("updatedAt", 0) < 30000:
+                if int(time.time() * 1000) - cache_data.get("updatedAt", 0) < CACHE_TTL_MS:
                     need_update = False
-        except Exception:
+        except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
             pass
             
         if need_update and not os.environ.get("DISABLE_QUOTA_HOOK"):
@@ -507,8 +540,8 @@ def main():
                     start_new_session=True,
                     env=env
                 )
-            except Exception:
-                pass
+            except (OSError, FileNotFoundError) as e:
+                _log(f"failed to start background quota fetch: {e}")
                 
         norm_model = re.sub(r'[^a-z0-9]+', '', fallback_model.lower())
         model_quota = None
@@ -726,7 +759,7 @@ def main():
         sys.stdout.flush()
         
     except Exception as e:
-        sys.stderr.write(f"statusline: erro inesperado: {e}\n")
+        _log(f"unexpected error: {e}")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--fetch-quota":
@@ -738,8 +771,10 @@ if __name__ == "__main__":
                 cache_path = os.path.join(cache_dir, "real_quota_cache.json")
                 with open(cache_path, "w", encoding="utf-8") as f:
                     json.dump(cache, f, indent=2)
-        except Exception:
-            pass
+        except (OSError, IOError) as e:
+            _log(f"failed to write quota cache: {e}")
+        except Exception as e:
+            _log(f"quota fetch failed: {e}")
         sys.exit(0)
     else:
         main()
