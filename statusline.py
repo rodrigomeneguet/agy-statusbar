@@ -417,12 +417,12 @@ def main():
             lang = settings["ui"]["language"]
             
         # Carregar configurações visuais
-        ui_config = settings.get("ui", {})
-        sl_config = ui_config.get("statusline", {})
-        theme = sl_config.get("theme", "capsule")
+        ui_config = settings.get("ui", {}) or {}
+        sl_config = ui_config.get("statusline", {}) or {}
+        theme = sl_config.get("theme", "capsule") or "capsule"
         # nerdFonts padrão desabilitado para usar emojis nítidos se o usuário não possuir Nerd Fonts
-        nerd_fonts = sl_config.get("nerdFonts", False)
-        progressBarWidth = sl_config.get("progressBarWidth", 10)
+        nerd_fonts = sl_config.get("nerdFonts", False) or False
+        progressBarWidth = sl_config.get("progressBarWidth", 10) or 10
         
         footer_items = None
         if "ui" in settings and "footer" in settings["ui"] and "items" in settings["ui"]["footer"]:
