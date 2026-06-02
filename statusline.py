@@ -412,12 +412,13 @@ def main():
         elif model_obj.get("id"):
             fallback_model = model_obj["id"]
 
+        ui_config = settings.get("ui", {}) or {}
+        
         lang = "pt"
-        if "ui" in settings and "language" in settings["ui"]:
-            lang = settings["ui"]["language"]
+        if "language" in ui_config:
+            lang = ui_config["language"]
             
         # Carregar configurações visuais
-        ui_config = settings.get("ui", {}) or {}
         sl_config = ui_config.get("statusline", {}) or {}
         theme = sl_config.get("theme", "capsule") or "capsule"
         # nerdFonts padrão desabilitado para usar emojis nítidos se o usuário não possuir Nerd Fonts
@@ -425,8 +426,8 @@ def main():
         progressBarWidth = sl_config.get("progressBarWidth", 10) or 10
         
         footer_items = None
-        if "ui" in settings and "footer" in settings["ui"] and "items" in settings["ui"]["footer"]:
-            footer_items = settings["ui"]["footer"]["items"]
+        if "footer" in ui_config and "items" in (ui_config["footer"] or {}):
+            footer_items = ui_config["footer"]["items"]
             
         if not footer_items:
             footer_items = [
