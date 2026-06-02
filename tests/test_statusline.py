@@ -277,7 +277,7 @@ class TestGetModelColor:
 
     def test_gemini(self):
         color = statusline.get_model_color("Gemini 3.5 Flash")
-        assert color != statusline.BLUE or color == statusline.BLUE
+        assert color == "\033[38;2;71;150;227m"
 
     def test_gpt(self):
         color = statusline.get_model_color("GPT-4o")
