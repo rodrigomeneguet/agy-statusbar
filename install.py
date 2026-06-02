@@ -3,6 +3,205 @@ import os
 import sys
 import json
 import shutil
+import platform
+import subprocess
+import urllib.request
+import urllib.error
+
+# Cores globais para UX premium
+C_BLUE = '\033[38;2;137;180;250m'
+C_GREEN = '\033[38;2;166;227;161m'
+C_YELLOW = '\033[38;2;249;226;175m'
+C_CYAN = '\033[38;2;137;220;235m'
+C_RED = '\033[38;2;243;139;168m'
+C_RESET = '\033[0m'
+
+def detect_nerd_fonts():
+    """Detecta se há alguma Nerd Font instalada no sistema."""
+    system = platform.system()
+    
+    if system == "Linux" or system == "Darwin":
+        # 1. Tentar fc-list se disponível
+        if shutil.which("fc-list"):
+            try:
+                proc = subprocess.run(
+                    ["fc-list", ":", "family"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=2.0
+                )
+                if proc.returncode == 0:
+                    families = proc.stdout.lower()
+                    if "nerd font" in families or " nf" in families:
+                        return True
+            except Exception:
+                pass
+        
+        # 2. Varredura manual de pastas de fontes locais e globais
+        home = os.path.expanduser("~")
+        search_dirs = [
+            os.path.join(home, ".local/share/fonts"),
+            os.path.join(home, ".fonts"),
+            "/usr/share/fonts",
+            "/usr/local/share/fonts"
+        ]
+        for sdir in search_dirs:
+            if os.path.exists(sdir):
+                for root, _, files in os.walk(sdir):
+                    for file in files:
+                        lower_file = file.lower()
+                        if lower_file.endswith((".ttf", ".otf")):
+                            if "nerd" in lower_file or " nf" in lower_file:
+                                return True
+                                
+    elif system == "Windows":
+        # 1. Verificar registros do Windows (HKCU e HKLM)
+        try:
+            import winreg
+            registry_paths = [
+                (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows NT\CurrentVersion\Fonts"),
+                (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows NT\CurrentVersion\Fonts")
+            ]
+            for hkey_root, subkey in registry_paths:
+                try:
+                    with winreg.OpenKey(hkey_root, subkey) as key:
+                        i = 0
+                        while True:
+                            val_name, _, _ = winreg.EnumValue(key, i)
+                            if "nerd" in val_name.lower() or " nf" in val_name.lower():
+                                return True
+                            i += 1
+                except OSError:
+                    pass
+        except Exception:
+            pass
+            
+        # 2. Escaneamento do diretório do usuário local e de fontes global
+        home = os.path.expanduser("~")
+        search_dirs = [
+            os.path.join(home, "AppData/Local/Microsoft/Windows/Fonts"),
+            os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts")
+        ]
+        for sdir in search_dirs:
+            if os.path.exists(sdir):
+                for root, _, files in os.walk(sdir):
+                    for file in files:
+                        lower_file = file.lower()
+                        if lower_file.endswith((".ttf", ".otf")):
+                            if "nerd" in lower_file or " nf" in lower_file:
+                                return True
+                                
+    return False
+
+def download_font_with_progress(url, dest_path):
+    """Baixa um arquivo de fonte exibindo uma barra de progresso estilizada."""
+    print(f"{C_CYAN}Baixando: {os.path.basename(dest_path)}...{C_RESET}")
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        )
+        with urllib.request.urlopen(req, timeout=30) as response:
+            total_size = int(response.info().get('Content-Length', 0))
+            block_size = 8192
+            downloaded = 0
+            
+            with open(dest_path, 'wb') as f:
+                while True:
+                    buffer = response.read(block_size)
+                    if not buffer:
+                        break
+                    downloaded += len(buffer)
+                    f.write(buffer)
+                    
+                    # Desenhar barra de progresso visual
+                    if total_size > 0:
+                        percent = (downloaded / total_size) * 100
+                        filled_length = int(40 * downloaded // total_size)
+                        bar = '█' * filled_length + '░' * (40 - filled_length)
+                        # Imprimir barra sem pular linha
+                        sys.stdout.write(f"\r{C_BLUE}[{bar}]{C_RESET} {percent:.1f}% ({downloaded/(1024*1024):.1f}MB / {total_size/(1024*1024):.1f}MB)")
+                        sys.stdout.flush()
+            print(f"\n{C_GREEN}✔ Download concluído!{C_RESET}")
+            return True
+    except Exception as e:
+        print(f"\n{C_RED}❌ Falha ao baixar a fonte: {e}{C_RESET}")
+        return False
+
+def install_nerd_fonts():
+    """Baixa e instala JetBrains Mono Nerd Font no sistema de forma local (sem admin)."""
+    system = platform.system()
+    home = os.path.expanduser("~")
+    
+    # Definir diretório de destino
+    if system == "Linux" or system == "Darwin":
+        font_dir = os.path.join(home, ".local/share/fonts/NerdFonts")
+    elif system == "Windows":
+        font_dir = os.path.join(home, "AppData/Local/Microsoft/Windows/Fonts")
+    else:
+        print(f"{C_YELLOW}Aviso: Instalação automática não suportada para o sistema {system}.{C_RESET}")
+        return False
+        
+    try:
+        os.makedirs(font_dir, exist_ok=True)
+    except Exception as e:
+        print(f"{C_RED}Erro ao criar diretório de fontes {font_dir}: {e}{C_RESET}")
+        return False
+        
+    # URLs oficiais da JetBrains Mono Nerd Font
+    fonts_to_download = {
+        "JetBrainsMonoNerdFont-Regular.ttf": "https://raw.githubusercontent.com/ryanoasis/nerd-fonts/master/patched-fonts/JetBrainsMono/Ligatures/Regular/JetBrainsMonoNerdFont-Regular.ttf",
+        "JetBrainsMonoNerdFont-Bold.ttf": "https://raw.githubusercontent.com/ryanoasis/nerd-fonts/master/patched-fonts/JetBrainsMono/Ligatures/Bold/JetBrainsMonoNerdFont-Bold.ttf"
+    }
+    
+    for name, url in fonts_to_download.items():
+        dest_path = os.path.join(font_dir, name)
+        success = download_font_with_progress(url, dest_path)
+        if not success:
+            return False
+        
+    # Procedimento pós-instalação
+    if system == "Linux" or system == "Darwin":
+        print(f"{C_CYAN}Atualizando cache de fontes do sistema (fc-cache)...{C_RESET}")
+        try:
+            if shutil.which("fc-cache"):
+                subprocess.run(["fc-cache", "-f"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"{C_GREEN}✔ Cache de fontes atualizado com sucesso!{C_RESET}")
+            else:
+                print(f"{C_YELLOW}Aviso: Utilitário fc-cache não encontrado. As fontes estarão disponíveis após reiniciar.{C_RESET}")
+        except Exception:
+            pass
+            
+    elif system == "Windows":
+        print(f"{C_CYAN}Registrando fontes no Registro do Windows (HKCU)...{C_RESET}")
+        try:
+            import winreg
+            # HKEY_CURRENT_USER\Software\Microsoft\Windows NT\CurrentVersion\Fonts
+            reg_path = r"Software\Microsoft\Windows NT\CurrentVersion\Fonts"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_SET_VALUE) as key:
+                # Registrar Regular
+                winreg.SetValueEx(
+                    key, 
+                    "JetBrainsMono Nerd Font Regular (TrueType)", 
+                    0, 
+                    winreg.REG_SZ, 
+                    "JetBrainsMonoNerdFont-Regular.ttf"
+                )
+                # Registrar Bold
+                winreg.SetValueEx(
+                    key, 
+                    "JetBrainsMono Nerd Font Bold (TrueType)", 
+                    0, 
+                    winreg.REG_SZ, 
+                    "JetBrainsMonoNerdFont-Bold.ttf"
+                )
+            print(f"{C_GREEN}✔ Fontes registradas com sucesso no Registro do Windows!{C_RESET}")
+            print(f"{C_YELLOW}Importante: Lembre-se de reiniciar o seu terminal para ativar a nova fonte.{C_RESET}")
+        except Exception as e:
+            print(f"{C_RED}Erro ao registrar fontes no Registro: {e}{C_RESET}")
+            
+    return True
 
 def main():
     # Cores no terminal
@@ -66,10 +265,29 @@ def main():
     # 3. Perguntar interativamente se for um TTY
     elif sys.stdin.isatty():
         try:
-            print(f"\n{C_CYAN}Configuração Visual:{C_RESET}")
-            print("O agy-statusbar suporta ícones tradicionais de Nerd Fonts de forma compacta.")
-            nerd_choice = input("Deseja ativar o suporte a Nerd Fonts por padrão? (S/N): ").strip().lower()
-            enable_nerdfonts = nerd_choice in ['s', 'sim', 'y', 'yes']
+            print(f"\n{C_CYAN}Verificando suporte a ícones...{C_RESET}")
+            has_fonts = detect_nerd_fonts()
+            
+            if has_fonts:
+                print(f"{C_GREEN}✔ Nerd Fonts detectadas com sucesso no sistema!{C_RESET}")
+                nerd_choice = input("Deseja ativar o suporte a Nerd Fonts por padrão? (S/N): ").strip().lower()
+                enable_nerdfonts = nerd_choice in ['s', 'sim', 'y', 'yes', '']  # enter padrão Sim
+            else:
+                print(f"{C_YELLOW}⚠ Nenhuma Nerd Font foi encontrada no sistema.{C_RESET}")
+                print("O agy-statusbar utiliza Nerd Fonts para exibir ícones cyberpunk elegantes.")
+                install_choice = input("Deseja baixar e instalar a JetBrainsMono Nerd Font recomendada agora? (S/N): ").strip().lower()
+                
+                if install_choice in ['s', 'sim', 'y', 'yes', '']:  # enter padrão Sim
+                    print(f"\n{C_BLUE}Iniciando a instalação automática de fontes...{C_RESET}")
+                    if install_nerd_fonts():
+                        print(f"{C_GREEN}✔ JetBrainsMono Nerd Font instalada com sucesso!{C_RESET}")
+                        enable_nerdfonts = True
+                    else:
+                        print(f"{C_RED}❌ Falha na instalação de fontes. O instalador prosseguirá com ícones Unicode normais.{C_RESET}")
+                        enable_nerdfonts = False
+                else:
+                    print(f"{C_YELLOW}Entendido. Prosseguindo com ícones Unicode normais (sem Nerd Fonts).{C_RESET}")
+                    enable_nerdfonts = False
         except EOFError:
             print(f"{C_YELLOW}Instalação não interativa detectada (EOF). Mantendo Nerd Fonts desativadas por padrão.{C_RESET}")
     else:
