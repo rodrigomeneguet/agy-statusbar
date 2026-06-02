@@ -597,16 +597,16 @@ def main():
             'memory-usage': ""                   # Microchip / RAM (classic)
         }
         
-        # Símbolos Unicode modernizados para Emojis nítidos, vibrantes e compatíveis por padrão
+        # Fallback 100% seguro caso Nerd Fonts estejam desabilitados (Emojis quebram a barra em alguns terminais)
         icons_unicode = {
-            'project-path': "📂",
-            'git-branch': "🌿",
-            'model-name': "🤖",
-            'context-used': "📊",
-            'token-count': "🪙",
-            'quota': "⚡",
-            'quota-reset-countdown': "⏳",
-            'memory-usage': "💻"
+            'project-path': "[DIR]",
+            'git-branch': "[GIT]",
+            'model-name': "[AI]",
+            'context-used': "[CTX]",
+            'token-count': "[TOK]",
+            'quota': "[API]",
+            'quota-reset-countdown': "[RST]",
+            'memory-usage': "[RAM]"
         }
         
         values = {
