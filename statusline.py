@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""Cyberpunk-themed statusline for the Agy CLI (Antigravity).
+
+Renders a terminal status bar with real-time quota tracking, context
+monitoring, Git branch detection, and multi-language support.
+"""
+from __future__ import annotations
+
 import sys
 import json
 import os
@@ -9,6 +16,7 @@ import urllib.parse
 import re
 import ssl
 import time
+from typing import Optional
 
 # Cache TTL in milliseconds (30 seconds)
 CACHE_TTL_MS = 30000
@@ -42,7 +50,8 @@ BLUE = "\033[38;2;137;180;250m"      # Azul Céu
 MAGENTA = "\033[38;2;203;166;247m"   # Lavanda/Magenta
 CYAN = "\033[38;2;137;220;235m"      # Ciano Elétrico
 
-def format_tokens(n):
+def format_tokens(n: Optional[int]) -> str:
+    """Format token count to human-readable string (e.g., 1500 -> '1.5k')."""
     if n is None:
         return "0"
     if n >= 1000000:
@@ -51,7 +60,12 @@ def format_tokens(n):
         return f"{n / 1000:.1f}k"
     return str(n)
 
-def get_git_branch(lang):
+def get_git_branch(lang: str) -> str:
+    """Detect current Git branch with dirty-state indicator.
+
+    Returns branch name with '*' suffix if working tree is dirty,
+    or a localized 'no VC' message if Git is unavailable.
+    """
     try:
         branch_proc = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -88,7 +102,12 @@ def get_git_branch(lang):
         return 'Sem controle de versão'
     return 'No VC'
 
-def get_cli_memory_mb():
+def get_cli_memory_mb() -> int:
+    """Read RSS memory usage in MB from /proc/{pid}/status.
+
+    Tries the parent process first (the Agy CLI), then falls back
+    to the current process. Returns 0 if /proc is unavailable.
+    """
     try:
         ppid = os.getppid()
         if os.path.exists(f"/proc/{ppid}/status"):
@@ -113,8 +132,13 @@ def get_cli_memory_mb():
     return 0
 
 
-def find_agy_processes():
-    """Encontra processos agy/language_server usando 'ps auxww' (método do Andy)."""
+def find_agy_processes() -> list[dict]:
+    """Discover running agy/language_server processes via 'ps auxww'.
+
+    Scores each candidate by process type, CSRF token presence, and
+    whether it's a macOS .app bundle (penalized). Returns a list
+    sorted by score descending.
+    """
     candidates = []
     try:
         result = subprocess.run(
@@ -163,8 +187,12 @@ def find_agy_processes():
     candidates.sort(key=lambda x: x["score"], reverse=True)
     return candidates
 
-def get_listening_ports(pid):
-    """Usa lsof diretamente (método do Andy) — mais portável que /proc/net/tcp."""
+def get_listening_ports(pid: int) -> list[int]:
+    """Find TCP listening ports for a given PID using lsof.
+
+    Returns sorted list of port numbers, or empty list if
+    lsof is unavailable or the process has no listening ports.
+    """
     ports = []
     try:
         out = subprocess.check_output(
@@ -188,7 +216,12 @@ def get_listening_ports(pid):
         _log(f"port detection error: {e}")
     return sorted(ports)
 
-def request_user_status(port, csrf_token):
+def request_user_status(port: int, csrf_token: str) -> dict:
+    """Query the local gRPC-to-JSON gateway for user quota status.
+
+    Makes an HTTPS POST to the agy daemon's GetUserStatus endpoint.
+    SSL verification is disabled for localhost connections.
+    """
     if not isinstance(port, int) or port <= 0 or port > 65535:
         raise ValueError(f"invalid port: {port}")
 
@@ -218,7 +251,12 @@ def request_user_status(port, csrf_token):
     with urllib.request.urlopen(req, context=ctx, timeout=HTTP_TIMEOUT) as res:
         return json.loads(res.read().decode("utf-8"))
 
-def format_reset_time(reset_time_str):
+def format_reset_time(reset_time_str: str) -> str:
+    """Convert ISO 8601 reset time to human-readable countdown.
+
+    Returns 'now' if past, or compact format like '3h 29m', '1d 5h'.
+    Returns empty string on parse failure.
+    """
     try:
         from datetime import datetime, timezone
         ts = reset_time_str.replace("Z", "+00:00")
@@ -244,7 +282,13 @@ def format_reset_time(reset_time_str):
     except Exception:
         return ""
 
-def fetch_live_quota():
+def fetch_live_quota() -> Optional[dict]:
+    """Fetch real quota data from all running agy daemon instances.
+
+    Discovers agy processes, queries each listening port, and
+    aggregates model quota data. Returns dict with 'models' and
+    'updatedAt' keys, or None if no data available.
+    """
     candidates = find_agy_processes()
     all_models = {}
 
@@ -304,7 +348,12 @@ def fetch_live_quota():
     return None
 
 
-def get_semantic_color(pct, reverse=False):
+def get_semantic_color(pct: float, reverse: bool = False) -> str:
+    """Return ANSI color based on percentage threshold.
+
+    When reverse=False: low % = green (good), high % = red (bad).
+    When reverse=True: high % = green (good), low % = red (bad).
+    """
     if reverse:
         # Alta porcentagem é saudável (Quota)
         if pct >= 75:
@@ -324,7 +373,11 @@ def get_semantic_color(pct, reverse=False):
             return ORANGE
         return RED
 
-def make_progress_bar(pct, theme="capsule", width=10, reverse=False):
+def make_progress_bar(pct: float, theme: str = "capsule", width: int = 10, reverse: bool = False) -> str:
+    """Render a themed progress bar with semantic coloring.
+
+    Supports 'capsule' (▕█░▏), 'retro' ([■□]), and 'minimal' (●) themes.
+    """
     ratio = max(0.0, min(1.0, pct / 100.0))
     filled = int(ratio * width)
     empty = width - filled
@@ -337,7 +390,11 @@ def make_progress_bar(pct, theme="capsule", width=10, reverse=False):
     else: # minimal
         return f"{color}●{RESET}"
 
-def get_model_color(name):
+def get_model_color(name: Optional[str]) -> str:
+    """Return ANSI color for known AI model families.
+
+    Claude -> orange, Gemini -> blue, GPT/ChatGPT -> green.
+    """
     lower = (name or "").lower()
     if "claude" in lower:
         return "\033[38;2;221;80;19m" # Laranja Claude
@@ -347,11 +404,11 @@ def get_model_color(name):
         return "\033[38;2;116;170;156m" # Verde GPT
     return BLUE
 
-def strip_ansi(s):
+def strip_ansi(s: str) -> str:
     """Remove all ANSI escape sequences from a string."""
     return re.sub(r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\][^\x07\x1b]*?(?:\x07|\x1b\\)', '', s)
 
-def get_display_width(s):
+def get_display_width(s: str) -> int:
     """Calculate display width handling emojis, PUA, and East Asian characters."""
     import unicodedata
     width = 0
@@ -372,7 +429,11 @@ def get_display_width(s):
             width += 1
     return width
 
-def get_settings():
+def get_settings() -> dict:
+    """Load and merge settings from global, CLI, project, and statusline config files.
+
+    Priority: project > statusline_config > cli > global.
+    """
     home = os.path.expanduser("~")
     global_path = os.path.join(home, ".gemini", "settings.json")
     cli_path = os.path.join(home, ".gemini", "antigravity-cli", "settings.json")
@@ -423,7 +484,49 @@ def get_settings():
             
     return settings
 
-def main():
+
+def _find_model_quota(fallback_model: str, models_cache: dict) -> dict:
+    """Match a model name against the quota cache using 4-level fuzzy matching.
+
+    Levels: exact -> substring -> provider family -> lowest quota fallback.
+    """
+    norm_model = re.sub(r'[^a-z0-9]+', '', fallback_model.lower())
+
+    # 1. Exact match
+    if norm_model in models_cache:
+        return models_cache[norm_model]
+
+    # 2. Substring match
+    for k, v in models_cache.items():
+        if norm_model in k or k in norm_model:
+            return v
+
+    # 3. Provider family match (claude, gemini, gpt)
+    for family in ["claude", "gemini", "gpt"]:
+        if family in norm_model:
+            best = None
+            for k, v in models_cache.items():
+                if family in k:
+                    if not best or v["remaining_percentage"] < best["remaining_percentage"]:
+                        best = v
+            if best:
+                return best
+
+    # 4. Fallback: lowest quota found
+    all_vals = list(models_cache.values())
+    if all_vals:
+        return min(all_vals, key=lambda x: x["remaining_percentage"])
+
+    return {"remaining_percentage": 100, "refreshes_in": ""}
+
+
+def main() -> None:
+    """Read JSON from stdin and render the statusline to stdout.
+
+    This is the primary entry point called by the Agy CLI on each
+    prompt. Handles context caching, quota tracking, and multi-theme
+    rendering with automatic line wrapping.
+    """
     try:
         input_data = sys.stdin.read()
         if not input_data.strip():
@@ -545,37 +648,9 @@ def main():
             except (OSError, FileNotFoundError) as e:
                 _log(f"failed to start background quota fetch: {e}")
                 
-        norm_model = re.sub(r'[^a-z0-9]+', '', fallback_model.lower())
-        model_quota = None
-        
         if cache_data and "models" in cache_data:
-            models_cache = cache_data["models"]
-            # 1. Match exato
-            if norm_model in models_cache:
-                model_quota = models_cache[norm_model]
-            else:
-                # 2. Substring fuzzy match
-                for k, v in models_cache.items():
-                    if norm_model in k or k in norm_model:
-                        model_quota = v
-                        break
-            
-            # 3. Match de família/provedor (Gemini, Claude, GPT)
-            if not model_quota:
-                for family in ["claude", "gemini", "gpt"]:
-                    if family in norm_model:
-                        for k, v in models_cache.items():
-                            if family in k:
-                                if not model_quota or v["remaining_percentage"] < model_quota["remaining_percentage"]:
-                                    model_quota = v
-            
-            # 4. Fallback final: menor cota encontrada no cache
-            if not model_quota:
-                all_vals = list(models_cache.values())
-                if all_vals:
-                    model_quota = min(all_vals, key=lambda x: x["remaining_percentage"])
-                    
-        if not model_quota:
+            model_quota = _find_model_quota(fallback_model, cache_data["models"])
+        else:
             model_quota = {"remaining_percentage": 100, "refreshes_in": ""}
             
         quota_pct = model_quota["remaining_percentage"]
