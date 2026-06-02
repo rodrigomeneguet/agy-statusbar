@@ -1,0 +1,87 @@
+[project]
+name = "agy-statusbar"
+version = "1.4.0"
+description = "Premium statusbar for Agy CLI (Antigravity CLI) with quota tracking, context monitoring, and multi-theme support"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Rodrigoeneguetti" }
+]
+keywords = ["agy", "statusbar", "antigravity", "cli", "gemini"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Repository = "https://github.com/rodrigomeneguet/agy-statusbar"
+Changelog = "https://github.com/rodrigomeneguet/agy-statusbar/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4",
+    "mypy>=1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests requiring system commands",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default argument (needed for subprocess)
+    "W293",   # blank line contains whitespace (existing code)
+    "UP015",  # unnecessary mode argument (existing code)
+    "UP022",  # prefer capture_output over PIPE (existing code)
+    "UP024",  # replace aliased errors with OSError (existing code)
+    "UP041",  # replace aliased errors with TimeoutError (existing code)
+    "I001",   # import block is un-sorted or un-formatted (existing code)
+    "F841",   # local variable assigned but never used (existing code)
+    "F401",   # imported but unused (existing code)
+    "SIM102", # use single if instead of nested (existing code)
+    "SIM103", # return condition directly (existing code)
+    "SIM108", # use ternary operator (existing code)
+    "SIM116", # use dictionary instead of if statements (existing code)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]  # allow assert in tests
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # gradual typing adoption
+check_untyped_defs = false  # gradual adoption
