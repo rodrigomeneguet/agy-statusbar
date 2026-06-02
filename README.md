@@ -5,11 +5,7 @@ Barra de status **premium e funcional** para o **Agy CLI** (Antigravity CLI da G
 Exibe em tempo real: quota de API, contexto utilizado, modelo ativo, branch Git, RAM e muito mais — tudo em cápsulas visuais com emojis ou Nerd Fonts.
 
 <p align="center">
-  <a href="Agy-Statusbar.png">
-    <img src="Agy-Statusbar.png" alt="Amostra da Agy Statusbar" width="100%">
-  </a>
-  <br>
-  <sub>(Clique na imagem para abrir em tamanho real)</sub>
+  <img src="Agy-Statusbar.png" alt="Amostra da Agy Statusbar" style="max-width:100%;height:auto;border-radius:8px;">
 </p>
 
 ---
@@ -69,13 +65,20 @@ Você pode ativá-lo respondendo `S` no instalador interativo, ou manualmente no
 
 ## 🚀 Instalação
 
-### One-Liner
+### One-Liner (modo interativo — recomendado)
 ```bash
 git clone https://github.com/rodrigomeneguet/agy-statusbar.git /tmp/agy-statusbar \
-  && cd /tmp/agy-statusbar \
-  && python3 install.py < /dev/null \
+  && python3 /tmp/agy-statusbar/install.py \
   && rm -rf /tmp/agy-statusbar
 ```
+
+> **ℹ️ Modo não-interativo (CI/automação):**
+> Para instalar sem prompts (sem Nerd Fonts por padrão), use:
+> ```bash
+> git clone https://github.com/rodrigomeneguet/agy-statusbar.git /tmp/agy-statusbar \
+>   && python3 /tmp/agy-statusbar/install.py --no-nerd-fonts \
+>   && rm -rf /tmp/agy-statusbar
+> ```
 
 ### Manual
 1. Copie `statusline.py` para `~/.gemini/statusline.py`
