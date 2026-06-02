@@ -65,7 +65,7 @@ Você pode ativá-lo respondendo `S` no instalador interativo, ou manualmente no
 ```bash
 git clone https://github.com/rodrigomeneguet/agy-statusbar.git /tmp/agy-statusbar \
   && cd /tmp/agy-statusbar \
-  && python3 install.py \
+  && python3 install.py < /dev/null \
   && rm -rf /tmp/agy-statusbar
 ```
 
