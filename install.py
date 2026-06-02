@@ -43,8 +43,10 @@ def detect_nerd_fonts():
         search_dirs = [
             os.path.join(home, ".local/share/fonts"),
             os.path.join(home, ".fonts"),
+            os.path.join(home, "Library/Fonts"),
             "/usr/share/fonts",
-            "/usr/local/share/fonts"
+            "/usr/local/share/fonts",
+            "/Library/Fonts"
         ]
         for sdir in search_dirs:
             if os.path.exists(sdir):
@@ -135,8 +137,10 @@ def install_nerd_fonts():
     home = os.path.expanduser("~")
     
     # Definir diretório de destino
-    if system == "Linux" or system == "Darwin":
+    if system == "Linux":
         font_dir = os.path.join(home, ".local/share/fonts/NerdFonts")
+    elif system == "Darwin":
+        font_dir = os.path.join(home, "Library/Fonts")
     elif system == "Windows":
         font_dir = os.path.join(home, "AppData/Local/Microsoft/Windows/Fonts")
     else:
@@ -162,7 +166,7 @@ def install_nerd_fonts():
             return False
         
     # Procedimento pós-instalação
-    if system == "Linux" or system == "Darwin":
+    if system == "Linux":
         print(f"{C_CYAN}Atualizando cache de fontes do sistema (fc-cache)...{C_RESET}")
         try:
             if shutil.which("fc-cache"):
@@ -172,6 +176,8 @@ def install_nerd_fonts():
                 print(f"{C_YELLOW}Aviso: Utilitário fc-cache não encontrado. As fontes estarão disponíveis após reiniciar.{C_RESET}")
         except Exception:
             pass
+    elif system == "Darwin":
+        print(f"{C_GREEN}✔ Fontes instaladas com sucesso em ~/Library/Fonts!{C_RESET}")
             
     elif system == "Windows":
         print(f"{C_CYAN}Registrando fontes no Registro do Windows (HKCU)...{C_RESET}")
