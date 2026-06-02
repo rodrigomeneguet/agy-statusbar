@@ -4,6 +4,10 @@ Barra de status **premium e funcional** para o **Agy CLI** (Antigravity CLI da G
 
 Exibe em tempo real: quota de API, contexto utilizado, modelo ativo, branch Git, RAM e muito mais — tudo em cápsulas visuais com emojis ou Nerd Fonts.
 
+<p align="center">
+  <img src="Agy-Statusbar.png" alt="Amostra da Agy Statusbar" width="800">
+</p>
+
 ---
 
 ## ✨ Recursos
